@@ -396,203 +396,251 @@ async function girisLoadSiparis(){
   girisSeciliId=id;
   girisKalemler=parseKalemler(siparisler.find(s=>s.id==id)||{});
   area.innerHTML='<div class="loading"><div class="spinner"></div></div>';
-  // Her iki kaynağı paralel çek
-  const [kd, kdUa] = await Promise.all([
-    getKd(id,'KD_KONFEKSIYON'),
-    getKd(id,'KD_URUN_AGACI')
-  ]);
+  const[kd,kdUa]=await Promise.all([getKd(id,'KD_KONFEKSIYON'),getKd(id,'KD_URUN_AGACI')]);
   girisKd={...kd};
-  renderGirisUrunAgaci(kdUa);
+  girisAktifAsama=null;
+  renderGirisAsamaTabs(kdUa);
 }
 
-// Ürün ağacındaki aşamaları çıkar
-const UA_ASAMALAR_MAP = {
-  dokuma:  {label:'Dokuma',          ikon:'🧶', color:'#a78bfa'},
-  kesim:   {label:'Kesim',           ikon:'✂️',  color:'#8b5cf6'},
-  yikama:  {label:'Yıkama',          ikon:'💧', color:'#06b6d4'},
-  dikim:   {label:'Dikim',           ikon:'🧵', color:'#ec4899'},
-  nakis:   {label:'Nakış',           ikon:'🪡', color:'#f472b6'},
-  baskı:   {label:'Baskı',           ikon:'🖨️', color:'#fb923c'},
-  ütü:     {label:'Ütü / Apre',      ikon:'♨️', color:'#94a3b8'},
-  kalite:  {label:'Kalite Kontrol',  ikon:'🔍', color:'#f59e0b'},
-  koli:    {label:'Koliye Giriş',    ikon:'📦', color:'#10b981'},
-  sevk:    {label:'Sevk',            ikon:'🚚', color:'#6366f1'},
+let girisAktifAsama=null;
+
+const UA_ASAMALAR_MAP={
+  dokuma:{label:'Dokuma',ikon:'🧶',color:'#a78bfa'},
+  kesim:{label:'Kesim',ikon:'✂️',color:'#8b5cf6'},
+  yikama:{label:'Yıkama',ikon:'💧',color:'#06b6d4'},
+  dikim:{label:'Dikim',ikon:'🧵',color:'#ec4899'},
+  nakis:{label:'Nakış',ikon:'🪡',color:'#f472b6'},
+  baskı:{label:'Baskı',ikon:'🖨️',color:'#fb923c'},
+  ütü:{label:'Ütü/Apre',ikon:'♨️',color:'#94a3b8'},
+  kalite:{label:'Kalite',ikon:'🔍',color:'#f59e0b'},
+  koli:{label:'Koli',ikon:'📦',color:'#10b981'},
+  sevk:{label:'Sevk',ikon:'🚚',color:'#6366f1'},
 };
 
-function getAsamalarFromUa(kdUa, kalemler) {
-  // Tüm kalemlerdeki aşamaların birleşimi
-  const asamaSet = new Set();
-  kalemler.forEach((_, i) => {
-    const ua = kdUa['u_'+i] || {};
-    const asamalar = ua.asamalar || ua.teknik_genel?.asamalar || [];
-    asamalar.forEach(a => asamaSet.add(a));
+function getAsamalar(kdUa,kalemler){
+  const set=new Set();
+  kalemler.forEach((_,i)=>{
+    const ua=kdUa['u_'+i]||{};
+    (ua.asamalar||ua.teknik_genel?.asamalar||[]).forEach(a=>set.add(a));
   });
-  // Hiç ürün ağacı yoksa varsayılan aşamalar
-  if (asamaSet.size === 0) {
-    ['kesim','dikim','kalite','koli'].forEach(a => asamaSet.add(a));
-  }
-  // Sıralı döndür
-  const order = ['dokuma','kesim','yikama','dikim','nakis','baskı','ütü','kalite','koli','sevk'];
-  return order.filter(a => asamaSet.has(a));
+  if(set.size===0)['kesim','dikim','kalite','koli'].forEach(a=>set.add(a));
+  return['dokuma','kesim','yikama','dikim','nakis','baskı','ütü','kalite','koli','sevk'].filter(a=>set.has(a));
 }
 
-function renderGirisUrunAgaci(kdUa) {
-  const area = document.getElementById('giris-form-area');
-  const k = girisKalemler;
-  const kd = girisKd;
-  const asamalar = getAsamalarFromUa(kdUa, k);
-  const siparis = siparisler.find(s=>s.id==girisSeciliId)||{};
+function renderGirisAsamaTabs(kdUa){
+  const area=document.getElementById('giris-form-area');
+  const asamalar=getAsamalar(kdUa,girisKalemler);
+  if(!girisAktifAsama||!asamalar.includes(girisAktifAsama))girisAktifAsama=asamalar[0]||null;
 
-  let html = '';
+  // Tab bar
+  const tabs=asamalar.map(a=>{
+    const m=UA_ASAMALAR_MAP[a]||{label:a,ikon:'⚙️',color:'#6366f1'};
+    const active=a===girisAktifAsama;
+    return `<button onclick="girisSecAsama('${a}')" style="flex-shrink:0;padding:9px 13px;font-size:11px;font-weight:800;border:none;background:${active?m.color:'var(--surface2)'};color:${active?'#fff':'var(--text3)'};border-radius:10px;cursor:pointer;transition:all .2s;white-space:nowrap">${m.ikon} ${m.label}</button>`;
+  }).join('');
 
-  // Durum güncelleme kartı
-  html += `<div class="form-section">
-    <div class="form-section-head" style="color:var(--accent2)">🔄 Sipariş Durumu</div>
-    <div class="form-section-body" style="display:flex;gap:8px;align-items:center">
-      <select class="field-select" id="kf-durum" style="margin-bottom:0;flex:1">
-        <option value="BEKLEMEDE" ${siparis.durum==='BEKLEMEDE'?'selected':''}>⏳ Beklemede</option>
-        <option value="ÜRETİMDE" ${siparis.durum==='ÜRETİMDE'?'selected':''}>⚡ Üretimdede</option>
-        <option value="DEVAM" ${siparis.durum==='DEVAM'?'selected':''}>▶️ Devam</option>
-        <option value="İPTAL" ${siparis.durum==='İPTAL'?'selected':''}>❌ İptal</option>
-      </select>
-      <button onclick="durumGuncelle()" style="background:var(--accent);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:800;padding:10px 14px;cursor:pointer;white-space:nowrap">Güncelle</button>
+  const tabHtml=`<div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;margin-bottom:12px">${tabs}</div>`;
+
+  // İçerik
+  const icerik=girisAktifAsama?renderAsamaIcerik(girisAktifAsama):'';
+
+  area.innerHTML=tabHtml+icerik;
+}
+
+function girisSecAsama(asama){
+  girisAktifAsama=asama;
+  const kdUaCache=kdCache['KD_URUN_AGACI_'+girisSeciliId]||{};
+  renderGirisAsamaTabs(kdUaCache);
+}
+
+function renderAsamaIcerik(asama){
+  const m=UA_ASAMALAR_MAP[asama]||{label:asama,ikon:'⚙️',color:'#6366f1'};
+  const kd=girisKd;
+  const kalemler=girisKalemler;
+
+  // Alan mapping: hangi aşamada hangi kd alanı izlenecek
+  const alanMap={
+    kesim:{yapilan:'kesilen',fire:'fire_kesim',yapilanLabel:'Kesilen',fireLabel:'Kesim Fire'},
+    yikama:{yapilan:'yikama_sevk',fire:null,yapilanLabel:'Sevk Edilen',fireLabel:null},
+    dikim:{yapilan:'dikilen',fire:'fire_dikim',yapilanLabel:'Dikilen',fireLabel:'Dikim Fire'},
+    nakis:{yapilan:'nakis_adet',fire:null,yapilanLabel:'Nakış Yapılan',fireLabel:null},
+    'baskı':{yapilan:'baski_adet',fire:null,yapilanLabel:'Baskı Yapılan',fireLabel:null},
+    ütü:{yapilan:'utu_adet',fire:null,yapilanLabel:'Ütü Yapılan',fireLabel:null},
+    kalite:{yapilan:'kk_gecen',fire:null,yapilanLabel:'KK Geçen',fireLabel:null},
+    koli:{yapilan:'kolide',fire:null,yapilanLabel:'Kolide',fireLabel:null},
+    sevk:{yapilan:'sevk_adet',fire:null,yapilanLabel:'Sevk Edilen',fireLabel:null},
+  };
+  const alan=alanMap[asama]||{yapilan:'adet',fire:null,yapilanLabel:'Yapılan',fireLabel:null};
+
+  // Toplamlar
+  const topSip=kalemler.reduce((a,k)=>a+(parseInt(k.miktar)||0),0);
+  const topYap=kalemler.reduce((a,_,i)=>a+(parseInt(kd['kalem_'+i]?.[alan.yapilan]||0)||0),0);
+  const topKalan=topSip-topYap;
+  const pct=topSip>0?Math.min(100,Math.round(topYap/topSip*100)):0;
+
+  // Özet
+  let ozet=`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:11px;font-weight:800;color:${m.color}">${m.ikon} ${m.label} Özeti</span>
+      <span style="font-size:12px;font-weight:800;color:${m.color}">${topYap}/${topSip} · %${pct}</span>
+    </div>
+    <div class="bar-track" style="margin-bottom:8px"><div class="bar-fill" style="width:${pct}%;background:${m.color}"></div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center">
+      <div><div style="font-size:16px;font-weight:800;color:var(--text)">${topSip}</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase">Sipariş</div></div>
+      <div><div style="font-size:16px;font-weight:800;color:${m.color}">${topYap}</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase">Yapılan</div></div>
+      <div><div style="font-size:16px;font-weight:800;color:${topKalan>0?'var(--amber)':'var(--green)'}">${topKalan}</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase">Kalan</div></div>
     </div>
   </div>`;
 
-  // Her aşama için kart
-  asamalar.forEach(asama => {
-    const meta = UA_ASAMALAR_MAP[asama] || {label:asama, ikon:'⚙️', color:'#6366f1'};
-    html += renderAsamaKarti(asama, meta, k, kd);
-  });
-
-  area.innerHTML = html;
-}
-
-function renderAsamaKarti(asama, meta, kalemler, kd) {
-  // Aşama bazında toplam hesapla
-  const toplamMap = {
-    kesim:  i => parseInt(kd['kalem_'+i]?.kesilen||0)||0,
-    yikama: i => parseInt(kd['kalem_'+i]?.yikama_sevk||0)||0,
-    dikim:  i => parseInt(kd['kalem_'+i]?.dikilen||0)||0,
-    kalite: i => parseInt(kd['kalem_'+i]?.kk_gecen||0)||0,
-    koli:   i => parseInt(kd['kalem_'+i]?.kolide||0)||0,
-  };
-  const getToplam = toplamMap[asama] || (() => 0);
-  const toplamSiparis = kalemler.reduce((a,k,i)=>{
-    const sa=parseInt(k.miktar||0)||0; return a+sa;
-  },0);
-  const toplamYapilan = kalemler.reduce((a,_,i)=>a+getToplam(i),0);
-  const pct = toplamSiparis>0?Math.min(100,Math.round(toplamYapilan/toplamSiparis*100)):0;
-
-  // Aşamaya özel genel alanlar
-  let genelAlanlar = '';
+  // Ekstra genel alanlar (kesim için kumaş, dikim için hat vb)
+  let genelAlanlar='';
   if(asama==='kesim'){
-    genelAlanlar = `<div class="field-row" style="margin-bottom:8px">
-      <div><label class="field-label">Kumaş Kodu</label><input class="field-input" id="kf-kumas-kod" placeholder="SM-0001" value="${esc(kd.kumas_kod||'')}" style="margin-bottom:0"></div>
-      <div><label class="field-label">Kesim Tarihi</label><input class="field-input" type="date" id="kf-kesim-tarih" value="${kd.kesim_tarih||''}" style="margin-bottom:0"></div>
-    </div>
-    <div class="field-row" style="margin-bottom:8px">
-      <div><label class="field-label">Gelen Metre</label><input class="field-input" type="number" id="kf-kumas-metre" placeholder="0" value="${kd.kumas_metre||''}" style="margin-bottom:0"></div>
-      <div><label class="field-label">Gelen KG</label><input class="field-input" type="number" id="kf-kumas-kg" placeholder="0" value="${kd.kumas_kg||''}" style="margin-bottom:0"></div>
-    </div>
-    <label class="field-checkbox" style="margin-bottom:4px"><input type="checkbox" id="kf-kumas-geldi" ${kd.kumas_geldi?'checked':''}><span>Kumaş teslim alındı ✓</span></label>
-    <label class="field-checkbox"><input type="checkbox" id="kf-yikama" ${kd.yikama_yapildi?'checked':''}><span>Yıkamaya gönderildi 💧</span></label>`;
+    genelAlanlar=`<div class="form-section" style="margin-bottom:10px">
+      <div class="form-section-head" style="color:var(--violet);font-size:10px">🏁 Kumaş Bilgisi</div>
+      <div class="form-section-body">
+        <div class="field-row">
+          <div><label class="field-label">Kumaş Kodu</label><input class="field-input" id="kf-kumas-kod" placeholder="SM-0001" value="${esc(kd.kumas_kod||'')}" style="margin-bottom:0"></div>
+          <div><label class="field-label">Kesim Tarihi</label><input class="field-input" type="date" id="kf-kesim-tarih" value="${kd.kesim_tarih||''}" style="margin-bottom:0"></div>
+        </div>
+        <div class="field-row" style="margin-top:8px">
+          <div><label class="field-label">Metre</label><input class="field-input" type="number" id="kf-kumas-metre" placeholder="0" value="${kd.kumas_metre||''}" style="margin-bottom:0"></div>
+          <div><label class="field-label">KG</label><input class="field-input" type="number" id="kf-kumas-kg" placeholder="0" value="${kd.kumas_kg||''}" style="margin-bottom:0"></div>
+        </div>
+        <div style="display:flex;gap:16px;margin-top:10px">
+          <label class="field-checkbox" style="margin-bottom:0"><input type="checkbox" id="kf-kumas-geldi" ${kd.kumas_geldi?'checked':''}><span>Kumaş teslim alındı</span></label>
+          <label class="field-checkbox" style="margin-bottom:0"><input type="checkbox" id="kf-yikama" ${kd.yikama_yapildi?'checked':''}><span>Yıkamaya gönderildi</span></label>
+        </div>
+      </div>
+    </div>`;
   } else if(asama==='dikim'){
-    genelAlanlar = `<div class="field-row" style="margin-bottom:8px">
-      <div><label class="field-label">Başlangıç</label><input class="field-input" type="date" id="kf-dikim-bas" value="${kd.dikim_bas||''}" style="margin-bottom:0"></div>
-      <div><label class="field-label">Tahmini Bitiş</label><input class="field-input" type="date" id="kf-dikim-bit" value="${kd.dikim_bit||''}" style="margin-bottom:0"></div>
-    </div>
-    <div class="field-row" style="margin-bottom:0">
-      <div><label class="field-label">Hat / Atölye</label><input class="field-input" id="kf-dikim-hat" placeholder="Hat adı" value="${esc(kd.dikim_hat||'')}" style="margin-bottom:0"></div>
-      <div><label class="field-label">Operatör Sayısı</label><input class="field-input" type="number" id="kf-dikim-operator-sayi" placeholder="0" value="${kd.dikim_operator_sayi||''}" style="margin-bottom:0"></div>
+    genelAlanlar=`<div class="form-section" style="margin-bottom:10px">
+      <div class="form-section-head" style="color:var(--pink);font-size:10px">🧵 Dikim Bilgisi</div>
+      <div class="form-section-body">
+        <div class="field-row">
+          <div><label class="field-label">Başlangıç</label><input class="field-input" type="date" id="kf-dikim-bas" value="${kd.dikim_bas||''}" style="margin-bottom:0"></div>
+          <div><label class="field-label">Bitiş</label><input class="field-input" type="date" id="kf-dikim-bit" value="${kd.dikim_bit||''}" style="margin-bottom:0"></div>
+        </div>
+        <div class="field-row" style="margin-top:8px">
+          <div><label class="field-label">Hat / Atölye</label><input class="field-input" id="kf-dikim-hat" placeholder="Hat adı" value="${esc(kd.dikim_hat||'')}" style="margin-bottom:0"></div>
+          <div><label class="field-label">Operatör Sayısı</label><input class="field-input" type="number" id="kf-dikim-operator-sayi" placeholder="0" value="${kd.dikim_operator_sayi||''}" style="margin-bottom:0"></div>
+        </div>
+      </div>
     </div>`;
   } else if(asama==='kalite'){
-    genelAlanlar = `<div class="field-row" style="margin-bottom:8px">
-      <div><label class="field-label">KK Tarihi</label><input class="field-input" type="date" id="kf-kk-tarih" value="${kd.kk_tarih||''}" style="margin-bottom:0"></div>
-      <div><label class="field-label">Kontrol Eden</label><input class="field-input" id="kf-kk-personel" placeholder="Ad Soyad" value="${esc(kd.kk_personel||'')}" style="margin-bottom:0"></div>
+    genelAlanlar=`<div class="form-section" style="margin-bottom:10px">
+      <div class="form-section-head" style="color:var(--amber);font-size:10px">🔍 KK Bilgisi</div>
+      <div class="form-section-body">
+        <div class="field-row">
+          <div><label class="field-label">KK Tarihi</label><input class="field-input" type="date" id="kf-kk-tarih" value="${kd.kk_tarih||''}" style="margin-bottom:0"></div>
+          <div><label class="field-label">Kontrol Eden</label><input class="field-input" id="kf-kk-personel" placeholder="Ad Soyad" value="${esc(kd.kk_personel||'')}" style="margin-bottom:0"></div>
+        </div>
+      </div>
     </div>`;
   } else if(asama==='koli'){
-    genelAlanlar = `<div class="field-row" style="margin-bottom:8px">
-      <div><label class="field-label">Koli Tarihi</label><input class="field-input" type="date" id="kf-koli-tarih" value="${kd.koli_tarih||''}" style="margin-bottom:0"></div>
-      <div><label class="field-label">Koli Sayısı</label><input class="field-input" type="number" id="kf-koli-sayi" placeholder="0" value="${kd.koli_sayi||''}" style="margin-bottom:0"></div>
+    genelAlanlar=`<div class="form-section" style="margin-bottom:10px">
+      <div class="form-section-head" style="color:var(--green);font-size:10px">📦 Koli Bilgisi</div>
+      <div class="form-section-body">
+        <div class="field-row">
+          <div><label class="field-label">Koli Tarihi</label><input class="field-input" type="date" id="kf-koli-tarih" value="${kd.koli_tarih||''}" style="margin-bottom:0"></div>
+          <div><label class="field-label">Koli Sayısı</label><input class="field-input" type="number" id="kf-koli-sayi" placeholder="0" value="${kd.koli_sayi||''}" style="margin-bottom:0"></div>
+        </div>
+        <div class="field-row" style="margin-top:8px">
+          <div><label class="field-label">Koli Başı Adet</label><input class="field-input" type="number" id="kf-koli-basi-adet" placeholder="0" value="${kd.koli_basi_adet||''}" style="margin-bottom:0"></div>
+          <div><label class="field-label">Koli KG</label><input class="field-input" type="number" id="kf-koli-kg" placeholder="0.0" value="${kd.koli_kg||''}" style="margin-bottom:0"></div>
+        </div>
+      </div>
     </div>`;
   }
 
   // Ürün listesi
-  let urunListesi = '';
-  if(kalemler.length > 0){
-    urunListesi = kalemler.map((k,i) => {
-      const kk = kd['kalem_'+i]||{};
-      const sipAdet = parseInt(k.miktar||0)||0;
-      const baslik = [k.ad||k.kod||'Kalem '+(i+1), k.ebat||k.olcu, k.renk].filter(Boolean).join(' · ');
+  let urunHtml='';
+  if(kalemler.length){
+    // Tablo başlığı
+    urunHtml+=`<div style="display:grid;grid-template-columns:1fr 80px 64px 64px;gap:6px;padding:6px 10px;margin-bottom:4px">
+      <span style="font-size:9px;font-weight:800;color:var(--text3);text-transform:uppercase">Ürün</span>
+      <span style="font-size:9px;font-weight:800;color:var(--text3);text-transform:uppercase;text-align:center">Girilecek</span>
+      <span style="font-size:9px;font-weight:800;color:${m.color};text-transform:uppercase;text-align:center">Yapılan</span>
+      <span style="font-size:9px;font-weight:800;color:var(--amber);text-transform:uppercase;text-align:center">Kalan</span>
+    </div>`;
 
-      let satirlar = '';
-      if(asama==='kesim'){
-        satirlar = `
-          <div class="kalem-girdi-row"><span class="kalem-girdi-lbl" style="color:var(--violet)">Kesilen</span><input class="kalem-girdi-input" type="number" min="0" placeholder="+ekle" id="k-kesilen-${i}"><span class="kalem-girdi-sum" style="color:var(--violet)">∑${kk.kesilen||0}</span></div>
-          <div class="kalem-girdi-row"><span class="kalem-girdi-lbl" style="color:var(--red)">Fire</span><input class="kalem-girdi-input" type="number" min="0" placeholder="+ekle" id="k-fire_kesim-${i}"><span class="kalem-girdi-sum" style="color:var(--red)">∑${kk.fire_kesim||0}</span></div>`;
-      } else if(asama==='dikim'){
-        satirlar = `
-          <div class="kalem-girdi-row"><span class="kalem-girdi-lbl" style="color:var(--pink)">Dikilen</span><input class="kalem-girdi-input" type="number" min="0" placeholder="+ekle" id="k-dikilen-${i}"><span class="kalem-girdi-sum" style="color:var(--pink)">∑${kk.dikilen||0}</span></div>
-          <div class="kalem-girdi-row"><span class="kalem-girdi-lbl" style="color:var(--red)">Fire</span><input class="kalem-girdi-input" type="number" min="0" placeholder="+ekle" id="k-fire_dikim-${i}"><span class="kalem-girdi-sum" style="color:var(--red)">∑${kk.fire_dikim||0}</span></div>`;
-      } else if(asama==='kalite'){
-        const ikiTop = parseInt(kk.iki_kalite||0)||0;
-        const dik = parseInt(kk.dikilen||0)||0;
-        const hat = ikiTop+(parseInt(kk.tamir||0)||0)+(parseInt(kk.imha||0)||0);
-        const fp = dik>0?Math.round(hat/dik*100):0;
-        satirlar = `
-          <div class="kalem-girdi-row"><span class="kalem-girdi-lbl" style="color:var(--green)">KK Geçen</span><input class="kalem-girdi-input" type="number" min="0" placeholder="+ekle" id="k-kk_gecen-${i}"><span class="kalem-girdi-sum" style="color:var(--green)">∑${kk.kk_gecen||0}</span></div>
-          <div class="kalem-girdi-row"><span class="kalem-girdi-lbl" style="color:var(--amber)">2. Kalite</span>
-            <div style="flex:1;display:flex;gap:4px">
-              <select id="kk2-sebep-${i}" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px;font-size:11px;outline:none">
+    urunHtml+=kalemler.map((k,i)=>{
+      const kk=kd['kalem_'+i]||{};
+      const sipAdet=parseInt(k.miktar||0)||0;
+      const yapilan=parseInt(kk[alan.yapilan]||0)||0;
+      const kalan=Math.max(0,sipAdet-yapilan);
+      const pctU=sipAdet>0?Math.min(100,Math.round(yapilan/sipAdet*100)):0;
+      const baslik=[k.ad||k.kod||'Kalem '+(i+1),k.ebat||k.olcu,k.renk].filter(Boolean).join(' · ');
+
+      // Kalite için ekstra satırlar (2. kalite, tamir, imha)
+      let extraRows='';
+      if(asama==='kalite'){
+        const ikiTop=parseInt(kk.iki_kalite||0)||0;
+        const dik=parseInt(kk.dikilen||0)||0;
+        const hat=ikiTop+(parseInt(kk.tamir||0)||0)+(parseInt(kk.imha||0)||0);
+        const fp=dik>0?Math.round(hat/dik*100):0;
+        extraRows=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+          <div style="display:grid;grid-template-columns:1fr 80px 64px 64px;gap:6px;margin-bottom:5px">
+            <span style="font-size:9px;color:var(--amber);font-weight:700">2. Kalite</span>
+            <div style="display:flex;gap:3px">
+              <select id="kk2-sebep-${i}" style="flex:1;background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:4px;font-size:10px;outline:none">
                 <option value="dokuma">Dokuma</option><option value="leke">Leke</option><option value="ebat">Ebat</option><option value="dikis">Dikiş</option><option value="diger">Diğer</option>
               </select>
-              <input id="kk2-adet-${i}" type="number" min="0" placeholder="adet" style="width:56px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px;font-size:12px;text-align:center;outline:none">
-              <button onclick="ikiKaliteEkle(${i})" style="background:var(--amber);border:none;border-radius:6px;color:#fff;font-size:10px;font-weight:800;padding:6px 8px;cursor:pointer">+</button>
             </div>
-            <span class="kalem-girdi-sum" style="color:var(--amber)">∑${ikiTop}</span>
+            <input id="kk2-adet-${i}" type="number" min="0" placeholder="adet" style="background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:5px;font-size:12px;text-align:center;outline:none;width:100%">
+            <button onclick="ikiKaliteEkle(${i})" style="background:var(--amber);border:none;border-radius:5px;color:#fff;font-size:10px;font-weight:800;cursor:pointer">+Ekle</button>
           </div>
-          <div class="kalem-girdi-row"><span class="kalem-girdi-lbl" style="color:var(--cyan)">Tamire</span><input class="kalem-girdi-input" type="number" min="0" placeholder="+ekle" id="k-tamir-${i}"><span class="kalem-girdi-sum" style="color:var(--cyan)">∑${kk.tamir||0}</span></div>
-          <div class="kalem-girdi-row"><span class="kalem-girdi-lbl" style="color:var(--red)">İmha</span><input class="kalem-girdi-input" type="number" min="0" placeholder="+ekle" id="k-imha-${i}"><span class="kalem-girdi-sum" style="color:var(--red)">∑${kk.imha||0}</span></div>
-          <div style="font-size:9px;color:var(--text3);margin-top:3px">Fire: %${fp} · Dikilen: ${dik}</div>`;
-      } else if(asama==='koli'){
-        satirlar = `
-          <div class="kalem-girdi-row"><span class="kalem-girdi-lbl" style="color:var(--green)">Kolide</span><input class="kalem-girdi-input" type="number" min="0" placeholder="+ekle" id="k-kolide-${i}"><span class="kalem-girdi-sum" style="color:var(--green)">∑${kk.kolide||0}</span></div>`;
-      } else {
-        satirlar = `<div style="font-size:11px;color:var(--text3);padding:4px 0">Bu aşama için giriş alanı yok</div>`;
+          <div style="display:grid;grid-template-columns:1fr 80px 64px 64px;gap:6px;margin-bottom:5px">
+            <span style="font-size:9px;color:var(--cyan);font-weight:700">Tamire</span>
+            <span></span>
+            <input id="k-tamir-${i}" type="number" min="0" placeholder="+ekle" style="background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:5px;font-size:12px;text-align:center;outline:none;width:100%">
+            <span style="font-size:11px;font-weight:800;color:var(--cyan);text-align:center;display:flex;align-items:center;justify-content:center">∑${kk.tamir||0}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 80px 64px 64px;gap:6px">
+            <span style="font-size:9px;color:var(--red);font-weight:700">İmha</span>
+            <span></span>
+            <input id="k-imha-${i}" type="number" min="0" placeholder="+ekle" style="background:var(--surface);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:5px;font-size:12px;text-align:center;outline:none;width:100%">
+            <span style="font-size:11px;font-weight:800;color:var(--red);text-align:center;display:flex;align-items:center;justify-content:center">∑${kk.imha||0}</span>
+          </div>
+          <div style="font-size:9px;color:var(--text3);margin-top:4px">Dikilen: ${dik} · 2.Kal: ${ikiTop} · Fire: %${fp}</div>
+        </div>`;
       }
 
-      const yapilan = getToplam(i);
-      const pctU = sipAdet>0?Math.min(100,Math.round(yapilan/sipAdet*100)):0;
-      return `<div class="kalem-girdi">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:6px">
-          <div style="font-size:12px;font-weight:700;line-height:1.4;flex:1">${esc(baslik)}</div>
-          <div style="text-align:right;flex-shrink:0">
-            <span style="font-size:15px;font-weight:800;color:${meta.color}">${yapilan}</span>
-            <span style="font-size:10px;color:var(--text3)">/${sipAdet}</span>
-            <div style="font-size:9px;color:${meta.color};font-weight:700">%${pctU}</div>
+      return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:6px">
+        <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:6px;line-height:1.4">${esc(baslik)}</div>
+        <div style="display:grid;grid-template-columns:1fr 80px 64px 64px;gap:6px;align-items:center">
+          <div>
+            <div class="bar-track"><div class="bar-fill" style="width:${pctU}%;background:${m.color}"></div></div>
+            <div style="font-size:9px;color:var(--text3);margin-top:3px">Sipariş: ${sipAdet} · %${pctU}</div>
+          </div>
+          <input type="number" min="0" placeholder="+ekle" id="k-${alan.yapilan}-${i}"
+            style="background:var(--surface);border:1px solid var(--border2);border-radius:7px;color:var(--text);padding:8px;font-size:14px;font-weight:700;text-align:center;outline:none;width:100%">
+          <div style="text-align:center">
+            <div style="font-size:16px;font-weight:800;color:${m.color}">${yapilan}</div>
+            <div style="font-size:9px;color:var(--text3)">yapılan</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:16px;font-weight:800;color:${kalan===0?'var(--green)':'var(--amber)'}">${kalan}</div>
+            <div style="font-size:9px;color:var(--text3)">kalan</div>
           </div>
         </div>
-        <div class="bar-row" style="margin-bottom:8px"><div class="bar-track" style="flex:1"><div class="bar-fill" style="width:${pctU}%;background:${meta.color}"></div></div></div>
-        ${satirlar}
+        ${alan.fire?`<div style="display:grid;grid-template-columns:1fr 80px 64px 64px;gap:6px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
+          <span style="font-size:9px;color:var(--red);font-weight:700">+ Fire</span>
+          <input type="number" min="0" placeholder="+fire" id="k-${alan.fire}-${i}"
+            style="background:var(--surface);border:1px solid rgba(239,68,68,.3);border-radius:7px;color:var(--red);padding:8px;font-size:13px;text-align:center;outline:none;width:100%">
+          <div style="text-align:center;font-size:13px;font-weight:800;color:var(--red)">∑${parseInt(kk[alan.fire]||0)||0}</div>
+          <span></span>
+        </div>`:''}
+        ${extraRows}
       </div>`;
     }).join('');
   }
 
-  const saveMap = {kesim:'kesim',dikim:'dikim',kalite:'kk',koli:'koli'};
-  const saveTip = saveMap[asama];
-  const saveBtn = saveTip ? `<button class="save-btn" style="background:${meta.color}" onclick="girisKaydet('${saveTip}')">💾 ${meta.ikon} ${meta.label.toUpperCase()} KAYDET</button>` : '';
+  const saveMap={kesim:'kesim',yikama:'yikama',dikim:'dikim',nakis:'nakis',baskı:'baski',ütü:'utu',kalite:'kk',koli:'koli',sevk:'sevk'};
+  const saveTip=saveMap[asama]||asama;
 
-  return `<div class="form-section">
-    <div class="form-section-head" style="color:${meta.color}">${meta.ikon} ${meta.label}
-      <span style="margin-left:auto;font-size:11px;font-weight:800;color:${meta.color}">${toplamYapilan}/${toplamSiparis} · %${pct}</span>
-    </div>
-    <div class="form-section-body">
-      ${genelAlanlar ? `<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)">${genelAlanlar}</div>` : ''}
-      ${urunListesi}
-      ${saveBtn}
-    </div>
-  </div>`;
+  return ozet+genelAlanlar+
+    `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px">${urunHtml}</div>`+
+    `<button class="save-btn" style="background:${m.color}" onclick="girisKaydet('${saveTip}')">💾 ${m.ikon} ${m.label.toUpperCase()} KAYDET</button>`;
 }
 
 async function durumGuncelle(){
@@ -663,7 +711,7 @@ async function girisKaydet(tip){
     girisKd={...kd};
     // Sayfayı yenile
     const kdUa = await getKd(girisSeciliId,'KD_URUN_AGACI');
-    renderGirisUrunAgaci(kdUa);
+    renderGirisAsamaTabs(kdUa);
     showToast('✅ Kaydedildi');
   }catch(e){showToast('❌ Hata: '+(e.message||e));}
   btn.disabled=false;btn.textContent='💾 KAYDET';
