@@ -185,7 +185,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="kpi-row" id="kpi-row"></div>
     <div class="filter-row">
       <button class="filter-chip active" onclick="setFilter('HEPSI',this)">Tümü</button>
-      <button class="filter-chip" onclick="setFilter('SIMTEKS',this)">Simteks</button>
       <button class="filter-chip" onclick="setFilter('BEKLEMEDE',this)">Bekleyen</button>
       <button class="filter-chip" onclick="setFilter('URETIMDE',this)">Üretimdeki</button>
     </div>
@@ -315,24 +314,49 @@ function restoreGirisState(){
 
 async function loadSiparisler(){
   try{
+    // Önce tüm aktif siparişleri çek
     const{data,error}=await sb.from('siparisler').select('*').order('created_at',{ascending:false});
     if(error)throw error;
-    siparisler=(data||[]).filter(s=>s.durum!=='TAMAMLANDI');
+    const tumSiparisler=(data||[]).filter(s=>s.durum!=='TAMAMLANDI');
+
+    // KD_URUN_AGACI kayıtlarını toplu çek — uretim_yeri=simteks olanları bul
+    const tumIds=tumSiparisler.map(s=>s.id);
+    let simteksIdSet=new Set();
+    if(tumIds.length){
+      const{data:kdData}=await sb.from('siparis_akis')
+        .select('siparis_id,notlar')
+        .eq('islem','KD_URUN_AGACI')
+        .in('siparis_id',tumIds);
+      (kdData||[]).forEach(r=>{
+        try{
+          const kd=JSON.parse(r.notlar||'{}');
+          // Her kalem için u_0, u_1... bak — herhangi birinde uretim_yeri simteks ise dahil et
+          const isSimteksKd=Object.values(kd).some(v=>{
+            if(typeof v!=='object'||!v)return false;
+            const uy=String(v.uretim_yeri||v.islem_yeri||'').toLowerCase();
+            return uy.includes('simteks');
+          });
+          if(isSimteksKd)simteksIdSet.add(String(r.siparis_id));
+        }catch{}
+      });
+    }
+
+    // Sadece simteks olanları göster
+    siparisler=tumSiparisler.filter(s=>simteksIdSet.has(String(s.id)));
     siparisler.sort((a,b)=>compareSno(a.sno,b.sno));
-    simteksIds=new Set(siparisler.filter(s=>isSimteks(s)).map(s=>s.id));
+    simteksIds=simteksIdSet;
     renderSiparisler();
     populateSelects();
   }catch(e){document.getElementById('siparis-liste-card').innerHTML=`<div class="empty"><div class="icon">⚠️</div>Yüklenemedi: ${e.message}</div>`;}
 }
 
-function isSimteks(s){const f=String(s.firma||'').toLowerCase();return f.includes('simteks')||!s.firma||f==='';}
+function setFilter(f,el){
 
 function setFilter(f,el){aktifFilter=f;document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderSiparisler();}
 
 function renderSiparisler(){
   let liste=siparisler;
-  if(aktifFilter==='SIMTEKS')liste=siparisler.filter(s=>simteksIds.has(s.id));
-  else if(aktifFilter==='BEKLEMEDE')liste=siparisler.filter(s=>!s.durum||s.durum==='BEKLEMEDE');
+  if(aktifFilter==='BEKLEMEDE')liste=siparisler.filter(s=>!s.durum||s.durum==='BEKLEMEDE');
   else if(aktifFilter==='URETIMDE')liste=siparisler.filter(s=>['ÜRETİMDE','DEVAM'].includes(s.durum));
   const aktif=siparisler.filter(s=>['ÜRETİMDE','DEVAM'].includes(s.durum));
   const bek=siparisler.filter(s=>!s.durum||s.durum==='BEKLEMEDE');
@@ -341,7 +365,7 @@ function renderSiparisler(){
     <div class="kpi-box"><div class="kpi-val" style="color:var(--green)">${aktif.length}</div><div class="kpi-lbl">Aktif</div></div>
     <div class="kpi-box"><div class="kpi-val" style="color:var(--amber)">${bek.length}</div><div class="kpi-lbl">Bekleyen</div></div>`;
   if(!liste.length){document.getElementById('siparis-liste-card').innerHTML=`<div class="empty"><div class="icon">📭</div>Sipariş bulunamadı</div>`;return;}
-  let html=`<div class="card-head"><div class="card-dot" style="background:var(--accent)"></div><div class="card-title">${aktifFilter==='SIMTEKS'?'Simteks Siparişleri':'Aktif Siparişler'}</div><div class="card-count">${liste.length} sipariş</div></div>`;
+  let html=`<div class="card-head"><div class="card-dot" style="background:var(--accent)"></div><div class="card-title">Simteks Siparişleri</div><div class="card-count">${liste.length} sipariş</div></div>`;
   liste.forEach(s=>{html+=sipItem(s);});
   document.getElementById('siparis-liste-card').innerHTML=html;
 }
@@ -350,7 +374,7 @@ function sipItem(s){
   const k=parseKalemler(s);
   const adet=parseInt(s.miktar)||k.reduce((a,x)=>a+(parseInt(x.miktar)||0),0);
   const ozet=k.length?k.slice(0,2).map(x=>x.ad||x.kod||'').filter(Boolean).join(', ')+(k.length>2?` +${k.length-2}`:''):'—';
-  const sTg=simteksIds.has(s.id)?'<span class="tag tag-cyan">Simteks</span>':'<span class="tag tag-gray">Fason</span>';
+  const sTg='';
   return `<div class="siparis-item" onclick="openSiparis(${s.id})">
     <div class="siparis-dot" style="background:${dColor(s.durum)}"></div>
     <div class="siparis-info">
@@ -366,7 +390,7 @@ function openSiparis(id){
   selectedSiparis=siparisler.find(s=>s.id==id);if(!selectedSiparis)return;
   document.getElementById('m-sno').textContent=selectedSiparis.sno||'—';
   document.getElementById('m-firma').textContent=selectedSiparis.firma||'—';
-  document.getElementById('m-tags').innerHTML=dTag(selectedSiparis.durum)+(simteksIds.has(selectedSiparis.id)?'<span class="tag tag-cyan">Simteks</span>':'<span class="tag tag-gray">Fason</span>');
+  document.getElementById('m-tags').innerHTML=dTag(selectedSiparis.durum);
   document.getElementById('detay-modal').style.display='block';
   document.querySelectorAll('.modal-tab').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.modal-tab')[0].classList.add('active');
