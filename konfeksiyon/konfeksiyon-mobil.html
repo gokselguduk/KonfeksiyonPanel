@@ -314,37 +314,12 @@ function restoreGirisState(){
 
 async function loadSiparisler(){
   try{
-    // Önce tüm aktif siparişleri çek
     const{data,error}=await sb.from('siparisler').select('*').order('created_at',{ascending:false});
     if(error)throw error;
-    const tumSiparisler=(data||[]).filter(s=>s.durum!=='TAMAMLANDI');
-
-    // KD_URUN_AGACI kayıtlarını toplu çek — uretim_yeri=simteks olanları bul
-    const tumIds=tumSiparisler.map(s=>s.id);
-    let simteksIdSet=new Set();
-    if(tumIds.length){
-      const{data:kdData}=await sb.from('siparis_akis')
-        .select('siparis_id,notlar')
-        .eq('islem','KD_URUN_AGACI')
-        .in('siparis_id',tumIds);
-      (kdData||[]).forEach(r=>{
-        try{
-          const kd=JSON.parse(r.notlar||'{}');
-          // Her kalem için u_0, u_1... bak — herhangi birinde uretim_yeri simteks ise dahil et
-          const isSimteksKd=Object.values(kd).some(v=>{
-            if(typeof v!=='object'||!v)return false;
-            const uy=String(v.uretim_yeri||v.islem_yeri||'').toLowerCase();
-            return uy.includes('simteks');
-          });
-          if(isSimteksKd)simteksIdSet.add(String(r.siparis_id));
-        }catch{}
-      });
-    }
-
-    // Sadece simteks olanları göster
-    siparisler=tumSiparisler.filter(s=>simteksIdSet.has(String(s.id)));
+    const gizli=['TAMAMLANDI','İPTAL','SEVK EDILDI','SEVK EDİLDİ','KAPANDI'];
+    siparisler=(data||[]).filter(s=>!gizli.includes(String(s.durum||'').toUpperCase().trim()));
     siparisler.sort((a,b)=>compareSno(a.sno,b.sno));
-    simteksIds=simteksIdSet;
+    simteksIds=new Set(siparisler.map(s=>String(s.id)));
     renderSiparisler();
     populateSelects();
   }catch(e){document.getElementById('siparis-liste-card').innerHTML=`<div class="empty"><div class="icon">⚠️</div>Yüklenemedi: ${e.message}</div>`;}
