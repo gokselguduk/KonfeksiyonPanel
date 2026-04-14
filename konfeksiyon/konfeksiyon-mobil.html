@@ -350,8 +350,6 @@ async function loadSiparisler(){
   }catch(e){document.getElementById('siparis-liste-card').innerHTML=`<div class="empty"><div class="icon">⚠️</div>Yüklenemedi: ${e.message}</div>`;}
 }
 
-function setFilter(f,el){
-
 function setFilter(f,el){aktifFilter=f;document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderSiparisler();}
 
 function renderSiparisler(){
