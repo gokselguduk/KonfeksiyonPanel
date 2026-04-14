@@ -316,7 +316,8 @@ async function loadSiparisler(){
   try{
     const{data,error}=await sb.from('siparisler').select('*').order('created_at',{ascending:false});
     if(error)throw error;
-    siparisler=(data||[]).filter(s=>s.durum!=='TAMAMLANDI');
+    const gizli=['TAMAMLANDI','İPTAL','SEVK EDILDI','SEVK EDİLDİ','KAPANDI'];
+    siparisler=(data||[]).filter(s=>!gizli.includes(String(s.durum||'').toUpperCase().trim()));
     siparisler.sort((a,b)=>compareSno(a.sno,b.sno));
     simteksIds=new Set(siparisler.map(s=>String(s.id)));
     renderSiparisler();
