@@ -183,12 +183,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
   <div id="tab-siparisler" class="content">
     <div class="kpi-row" id="kpi-row"></div>
-    <div class="filter-row">
-      <button class="filter-chip active" onclick="setFilter('HEPSI',this)">Tümü</button>
-      <button class="filter-chip" onclick="setFilter('BEKLEMEDE',this)">Bekleyen</button>
-      <button class="filter-chip" onclick="setFilter('URETIMDE',this)">Üretimdeki</button>
-    </div>
-    <div class="sec-title">Aktif Siparişler</div>
+    <div class="sec-title">Simteks Siparişleri</div>
     <div class="card" id="siparis-liste-card">
       <div class="loading"><div class="spinner"></div><div>Yükleniyor…</div></div>
     </div>
@@ -317,9 +312,27 @@ async function loadSiparisler(){
     const{data,error}=await sb.from('siparisler').select('*').order('created_at',{ascending:false});
     if(error)throw error;
     const gizli=['TAMAMLANDI','İPTAL','SEVK EDILDI','SEVK EDİLDİ','KAPANDI'];
-    siparisler=(data||[]).filter(s=>!gizli.includes(String(s.durum||'').toUpperCase().trim()));
+    const tumSiparisler=(data||[]).filter(s=>!gizli.includes(String(s.durum||'').toUpperCase().trim()));
+    const tumIds=tumSiparisler.map(s=>s.id);
+    let simteksIdSet=new Set();
+    if(tumIds.length){
+      const{data:kdData}=await sb.from('siparis_akis')
+        .select('siparis_id,notlar')
+        .eq('islem','KD_URUN_AGACI')
+        .in('siparis_id',tumIds);
+      (kdData||[]).forEach(r=>{
+        try{
+          const kd=JSON.parse(r.notlar||'{}');
+          const isSimteks=Object.values(kd).some(v=>
+            v?.teknik_genel?.uretim_yeri==='SIMTEKS_KONF'
+          );
+          if(isSimteks)simteksIdSet.add(String(r.siparis_id));
+        }catch{}
+      });
+    }
+    siparisler=tumSiparisler.filter(s=>simteksIdSet.has(String(s.id)));
     siparisler.sort((a,b)=>compareSno(a.sno,b.sno));
-    simteksIds=new Set(siparisler.map(s=>String(s.id)));
+    simteksIds=simteksIdSet;
     renderSiparisler();
     populateSelects();
   }catch(e){document.getElementById('siparis-liste-card').innerHTML=`<div class="empty"><div class="icon">⚠️</div>Yüklenemedi: ${e.message}</div>`;}
@@ -329,8 +342,6 @@ function setFilter(f,el){aktifFilter=f;document.querySelectorAll('.filter-chip')
 
 function renderSiparisler(){
   let liste=siparisler;
-  if(aktifFilter==='BEKLEMEDE')liste=siparisler.filter(s=>!s.durum||s.durum==='BEKLEMEDE');
-  else if(aktifFilter==='URETIMDE')liste=siparisler.filter(s=>['ÜRETİMDE','DEVAM'].includes(s.durum));
   const aktif=siparisler.filter(s=>['ÜRETİMDE','DEVAM'].includes(s.durum));
   const bek=siparisler.filter(s=>!s.durum||s.durum==='BEKLEMEDE');
   document.getElementById('kpi-row').innerHTML=`
