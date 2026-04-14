@@ -248,27 +248,6 @@ let sb=null,currentUser=null,siparisler=[],selectedSiparis=null;
 let kdCache={},girisSeciliId=null,girisKd={},girisKalemler=[],girisTab='kesim';
 let aktifFilter='HEPSI',simteksIds=new Set(),devamdaIds=new Set();
 
-function normText(v){return String(v??'').toLowerCase().trim();}
-function siparisUretimYeri(s){
-  const adaylar=[s?.uretim_yeri,s?.uretimyeri,s?.uretimYeri,s?.production_place,s?.productionPlace];
-  for(const aday of adaylar){
-    if(typeof aday==='string'&&aday.trim())return aday.trim();
-  }
-  return '';
-}
-function isSimteksSiparis(s){
-  const y=normText(siparisUretimYeri(s))
-    .replaceAll('ı','i')
-    .replaceAll('ş','s')
-    .replaceAll('ğ','g')
-    .replaceAll('ü','u')
-    .replaceAll('ö','o')
-    .replaceAll('ç','c');
-  if(!y)return true; // ana ERP davranisi: bos/eski kayitlar varsayilan Simteks
-  if(y==='simteks'||y==='simteks_konf'||y==='simteks_konfeksiyon'||y==='simteks konfeksiyon')return true;
-  return false;
-}
-
 function initSB(){const c=window.__ERP_SUPABASE;if(!c||!c.url||!c.anonKey){showErr('erp-config.js yapılandırılmamış.');return false;}sb=supabase.createClient(c.url.trim(),c.anonKey.trim());return true;}
 
 async function doLogin(){
@@ -317,7 +296,7 @@ async function loadSiparisler(){
     const tumSiparisler=(data||[]).filter(s=>!gizli.includes(String(s.durum||'').toUpperCase().trim()));
     siparisler=tumSiparisler;
     simteksIds=new Set(siparisler.map(s=>String(s.id)));
-    window._girisListesi=siparisler.filter(isSimteksSiparis);
+    window._girisListesi=siparisler;
     devamdaIds=new Set();
     if(tumSiparisler.length){
       const{data:kdKonf}=await sb.from('siparis_akis')
