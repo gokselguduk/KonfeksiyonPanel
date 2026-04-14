@@ -313,26 +313,9 @@ async function loadSiparisler(){
     if(error)throw error;
     const gizli=['TAMAMLANDI','İPTAL','SEVK EDILDI','SEVK EDİLDİ','KAPANDI'];
     const tumSiparisler=(data||[]).filter(s=>!gizli.includes(String(s.durum||'').toUpperCase().trim()));
-    const tumIds=tumSiparisler.map(s=>s.id);
-    let simteksIdSet=new Set();
-    if(tumIds.length){
-      const{data:kdData}=await sb.from('siparis_akis')
-        .select('siparis_id,notlar')
-        .eq('islem','KD_URUN_AGACI')
-        .in('siparis_id',tumIds);
-      (kdData||[]).forEach(r=>{
-        try{
-          const kd=JSON.parse(r.notlar||'{}');
-          const isSimteks=Object.values(kd).some(v=>
-            v?.teknik_genel?.uretim_yeri==='SIMTEKS_KONF'
-          );
-          if(isSimteks)simteksIdSet.add(String(r.siparis_id));
-        }catch{}
-      });
-    }
-    siparisler=tumSiparisler.filter(s=>simteksIdSet.has(String(s.id)));
+    siparisler=tumSiparisler;
     siparisler.sort((a,b)=>compareSno(a.sno,b.sno));
-    simteksIds=simteksIdSet;
+    simteksIds=new Set(siparisler.map(s=>String(s.id)));
     renderSiparisler();
     populateSelects();
   }catch(e){document.getElementById('siparis-liste-card').innerHTML=`<div class="empty"><div class="icon">⚠️</div>Yüklenemedi: ${e.message}</div>`;}
