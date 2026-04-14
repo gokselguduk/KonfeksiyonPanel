@@ -2,14 +2,19 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Konfeksiyon">
+<meta name="theme-color" content="#0f1117">
 <title>Konfeksiyon Paneli · Simteks</title>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script src="erp-config.js"></script>
 <style>
 :root{--bg:#0f1117;--surface:#181c27;--surface2:#1e2436;--surface3:#252c3f;--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);--text:#e8eaf0;--text2:#9aa3b8;--text3:#5a6280;--accent:#6366f1;--accent2:#818cf8;--green:#10b981;--amber:#f59e0b;--red:#ef4444;--cyan:#06b6d4;--violet:#8b5cf6;--pink:#ec4899}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;overflow-x:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;overflow-x:hidden;max-width:480px;margin:0 auto;touch-action:pan-y}
 #login-screen{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1.5rem;background:radial-gradient(ellipse at 50% 0%,rgba(99,102,241,.15) 0%,transparent 60%)}
 .login-logo{width:64px;height:64px;background:linear-gradient(135deg,var(--accent),var(--violet));border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:1.5rem;box-shadow:0 8px 32px rgba(99,102,241,.3)}
 .login-title{font-size:22px;font-weight:700;margin-bottom:4px}
