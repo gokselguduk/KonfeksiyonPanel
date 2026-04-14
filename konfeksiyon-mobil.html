@@ -250,6 +250,28 @@ let aktifFilter='HEPSI',simteksIds=new Set(),devamdaIds=new Set();
 
 function initSB(){const c=window.__ERP_SUPABASE;if(!c||!c.url||!c.anonKey){showErr('erp-config.js yapılandırılmamış.');return false;}sb=supabase.createClient(c.url.trim(),c.anonKey.trim());return true;}
 
+function normText(v){
+  return String(v||'')
+    .toLowerCase()
+    .replaceAll('ı','i')
+    .replaceAll('İ','i')
+    .replaceAll('ğ','g')
+    .replaceAll('ü','u')
+    .replaceAll('ş','s')
+    .replaceAll('ö','o')
+    .replaceAll('ç','c')
+    .replace(/[^a-z0-9]+/g,' ')
+    .trim();
+}
+function siparisUretimYeri(s){
+  return normText(s?.uretim_yeri || s?.siparis_uretim_yeri || '');
+}
+function isSimteksSiparis(s){
+  const y=siparisUretimYeri(s);
+  if(!y) return true; // legacy kayitlar gorunmeye devam etsin
+  return y.includes('simteks') || y.includes('simteks konf') || y.includes('simteks konfeksiyon') || y.includes('simteks konfeksiyon uretim');
+}
+
 async function doLogin(){
   const u=document.getElementById('l-user').value.trim();
   const p=document.getElementById('l-pass').value;
@@ -295,8 +317,8 @@ async function loadSiparisler(){
     const gizli=['TAMAMLANDI','İPTAL'];
     const tumSiparisler=(data||[]).filter(s=>!gizli.includes(String(s.durum||'').toUpperCase().trim()));
     siparisler=tumSiparisler;
-    simteksIds=new Set(siparisler.map(s=>String(s.id)));
-    window._girisListesi=siparisler;
+    simteksIds=new Set(siparisler.filter(isSimteksSiparis).map(s=>String(s.id)));
+    window._girisListesi=siparisler.filter(isSimteksSiparis);
     devamdaIds=new Set();
     if(tumSiparisler.length){
       const{data:kdKonf}=await sb.from('siparis_akis')
