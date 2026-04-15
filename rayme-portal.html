@@ -486,6 +486,12 @@ async function loadSiparisler(){
       .select('*')
       .eq('firma','RAYME')
       .order('created_at',{ascending:false});
+    // Konfeksiyon talepleri
+    const{data:talepData}=await sb.from('konfeksiyon_talepleri')
+      .select('*')
+      .eq('firma','RAYME')
+      .neq('durum','TAMAMLANDI')
+      .order('created_at',{ascending:false});
     // Bekleyenleri siparişler formatına çevir
     const bekleyenFormat=(bekleyenData||[]).map(s=>({
       ...s,
@@ -493,7 +499,14 @@ async function loadSiparisler(){
       cins:JSON.stringify(s.kalemler||[]),
       _onay:true
     }));
-    siparisler=[...(onayliData||[]),...bekleyenFormat];
+    // Konfeksiyon taleplerini formatla
+    const talepFormat=(talepData||[]).map((s,i)=>({
+      ...s,
+      sno:'KT'+String(s.id).padStart(3,'0'),
+      cins:JSON.stringify(s.kalemler||[]),
+      _talep:true
+    }));
+    siparisler=[...(onayliData||[]),...bekleyenFormat,...talepFormat];
     renderKPI();
     renderSiparisler();
   }catch(e){
@@ -514,7 +527,46 @@ function renderKPI(){
 function renderSiparisler(){
   const liste=document.getElementById('siparis-liste');
   if(!siparisler.length){liste.innerHTML='<div class="empty"><div class="icon">📭</div>Aktif sipariş bulunamadı</div>';return;}
-  liste.innerHTML=siparisler.map(s=>sipCard(s)).join('');
+
+  // Konfeksiyon talepleri özet kartı
+  const talepler=siparisler.filter(s=>s._talep);
+  let ozetHtml='';
+  if(talepler.length){
+    // Tüm ürünleri topla
+    const urunMap={};
+    talepler.forEach(t=>{
+      const k=Array.isArray(t.kalemler)?t.kalemler:parseKalemler(t);
+      k.forEach(x=>{
+        const anahtar=[x.ad,x.ebat,x.renk].filter(Boolean).join('|');
+        if(!urunMap[anahtar])urunMap[anahtar]={ad:x.ad||'—',ebat:x.ebat||'',renk:x.renk||'',adet:0};
+        urunMap[anahtar].adet+=(parseFloat(x.miktar)||0);
+      });
+    });
+    const urunSatirlar=Object.values(urunMap).sort((a,b)=>b.adet-a.adet);
+    const toplamAdet=urunSatirlar.reduce((a,x)=>a+x.adet,0);
+
+    ozetHtml=`<div style="background:rgba(236,72,153,.06);border:1px solid rgba(236,72,153,.25);border-radius:14px;overflow:hidden;margin-bottom:10px">
+      <div style="padding:11px 14px;border-bottom:1px solid rgba(236,72,153,.2);display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:11px;font-weight:800;color:#ec4899;letter-spacing:.3px">🧵 KONFEKSİYON TALEPLERİ ÖZETİ</div>
+        <div style="text-align:right">
+          <div style="font-size:16px;font-weight:800;color:#ec4899">${toplamAdet}</div>
+          <div style="font-size:9px;color:var(--text3)">toplam adet · ${talepler.length} talep</div>
+        </div>
+      </div>
+      <div style="padding:10px 14px">
+        ${urunSatirlar.map(u=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(236,72,153,.1)">
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--text)">${esc(u.ad)}</div>
+              <div style="font-size:10px;color:var(--text3)">${[u.ebat,u.renk].filter(Boolean).join(' · ')||'—'}</div>
+            </div>
+            <div style="font-size:18px;font-weight:800;color:#ec4899;flex-shrink:0;margin-left:12px">${u.adet} <span style="font-size:10px;font-weight:600;color:var(--text3)">adet</span></div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  liste.innerHTML=ozetHtml+siparisler.map(s=>sipCard(s)).join('');
 }
 
 function sipCard(s){
@@ -522,15 +574,22 @@ function sipCard(s){
   const adet=parseInt(s.miktar)||k.reduce((a,x)=>a+(parseInt(x.miktar)||0),0);
   const urunler=k.slice(0,2).map(x=>[x.ad,x.renk,x.ebat].filter(Boolean).join(' · ')).filter(Boolean).join(', ')+(k.length>2?` +${k.length-2}`:'');
   const isOnay=s._onay||s.durum==='ONAY_BEKLIYOR';
+  const isTalep=s._talep;
   const tarihStr=s.created_at?new Date(s.created_at).toLocaleDateString('tr-TR'):'';
-  return `<div class="siparis-card" style="${isOnay?'border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.04)':''}" onclick="toggleDetay('${s._onay?'onay':''}_${s.id}')">
+  const prefix=isTalep?'talep_':isOnay?'onay_':'';
+  const borderStyle=isTalep?'border-color:rgba(236,72,153,.35);background:rgba(236,72,153,.04)':isOnay?'border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.04)':'';
+  const dotColor=isTalep?'#ec4899':isOnay?'#f59e0b':dColor(s.durum);
+  const snoDisplay=isTalep?`<span style="color:#ec4899;font-weight:800">${esc(s.sno)}</span>`:isOnay?`<span style="color:var(--amber);font-size:11px">⏳ Onay Bekliyor</span>`:esc(s.sno||'—');
+  const tagDisplay=isTalep?`<span class="tag" style="background:rgba(236,72,153,.12);color:#ec4899">🧵 KONF. TALEBİ</span>`:isOnay?`<span class="tag tag-amber">ONAY BEKLİYOR</span>`:dTag(s.durum);
+
+  return `<div class="siparis-card" style="${borderStyle}" onclick="toggleDetay('${prefix}${s.id}')">
     <div class="siparis-card-head">
-      <div class="siparis-dot" style="background:${isOnay?'#f59e0b':dColor(s.durum)}"></div>
+      <div class="siparis-dot" style="background:${dotColor}"></div>
       <div class="siparis-info">
-        <div class="siparis-no">${isOnay?`<span style="color:var(--amber);font-size:11px">⏳ Onay Bekliyor</span>`:`${esc(s.sno||'—')}`}</div>
+        <div class="siparis-no">${snoDisplay}</div>
         ${urunler?`<div class="siparis-urun">${esc(urunler)}</div>`:''}
         <div class="siparis-tags">
-          ${isOnay?`<span class="tag tag-amber">ONAY BEKLİYOR</span>`:`${dTag(s.durum)}`}
+          ${tagDisplay}
           ${s.ttarih?`<span class="tag tag-gray">📅 ${s.ttarih}</span>`:''}
           ${tarihStr?`<span class="tag tag-gray">${tarihStr}</span>`:''}
         </div>
@@ -540,9 +599,104 @@ function sipCard(s){
         <div class="siparis-adet-lbl">adet</div>
       </div>
     </div>
-    <div class="detay-panel" id="detay-${s._onay?'onay':''}_${s.id}"></div>
+    <div class="detay-panel" id="detay-${prefix}${s.id}"></div>
   </div>`;
 }
+
+async function renderTalepDetay(t, panel){
+  if(!t){panel.innerHTML='<div class="empty">Talep bulunamadı</div>';return;}
+  const k=Array.isArray(t.kalemler)?t.kalemler:(parseKalemler(t));
+  const tarih=t.created_at?new Date(t.created_at).toLocaleString('tr-TR'):'—';
+
+  const kalemHtml=k.length?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+    <div class="sec-title" style="margin-bottom:6px">Ürünler</div>
+    ${k.map(x=>{
+      const rkodler=[x.rkod1,x.rkod2,x.rkod3,x.rkod4,x.rkod5,x.rkod6].filter(Boolean).join(', ');
+      return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:5px">
+        <div style="font-size:12px;font-weight:700">${esc(x.ad||'—')}</div>
+        <div style="font-size:10px;color:var(--text2);margin-top:2px">${[x.ebat,x.renk].filter(Boolean).join(' · ')||'—'}</div>
+        ${x.kod?`<div style="font-size:9px;color:var(--gold2)">Kod: ${esc(x.kod)}</div>`:''}
+        ${rkodler?`<div style="font-size:9px;color:var(--text3)">RK: ${esc(rkodler)}</div>`:''}
+        <div style="font-size:13px;font-weight:800;color:var(--green);margin-top:3px">${x.miktar||'—'} adet</div>
+      </div>`;
+    }).join('')}
+  </div>`:'';
+
+  panel.innerHTML=`<div style="padding:0 14px 14px">
+    <div class="info-row"><span class="info-key">Talep No</span><span class="info-val" style="color:#ec4899;font-weight:800">KT${String(t.id).padStart(3,'0')}</span></div>
+    <div class="info-row"><span class="info-key">Oluşturulma</span><span class="info-val" style="font-size:10px">${tarih}</span></div>
+    <div class="info-row"><span class="info-key">Termin</span><span class="info-val" style="color:var(--red)">${t.ttarih||'—'}</span></div>
+    <div class="info-row"><span class="info-key">Toplam Adet</span><span class="info-val" style="color:var(--green);font-weight:800">${t.miktar||'—'} adet</span></div>
+    ${t.notlar?`<div class="info-row"><span class="info-key">Notlar</span><span class="info-val" style="max-width:60%;font-size:10px">${esc(t.notlar)}</span></div>`:''}
+    ${kalemHtml}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+      <button onclick="talepDuzenle(${t.id})" style="padding:10px;border-radius:9px;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer">✏️ Düzenle</button>
+      <button onclick="talepSil(${t.id})" style="padding:10px;border-radius:9px;border:1px solid rgba(240,96,96,.3);background:rgba(240,96,96,.08);color:var(--red);font-size:11px;font-weight:700;cursor:pointer">🗑️ Sil</button>
+    </div>
+  </div>`;
+}
+
+async function talepSil(id){
+  if(!confirm('Bu konfeksiyon talebi silinsin mi?'))return;
+  try{
+    const{error}=await sb.from('konfeksiyon_talepleri').delete().eq('id',id);
+    if(error)throw error;
+    showToast('✅ Talep silindi','ok');
+    await loadSiparisler();
+  }catch(e){showToast('❌ Hata: '+(e.message||e),'err');}
+}
+
+async function talepDuzenle(id){
+  const t=siparisler.find(x=>x._talep&&String(x.id)===String(id));
+  if(!t)return;
+  // Düzenleme için konfeksiyon talebi sekmesine geç ve formu doldur
+  const k=Array.isArray(t.kalemler)?t.kalemler:[];
+  talepKalemler=[...k];
+  const el=document.getElementById('t-termin');
+  if(el&&t.ttarih)el.value=t.ttarih;
+  const nel=document.getElementById('t-notlar');
+  if(nel)nel.value=t.notlar||'';
+  // Düzenleme moduna al
+  window._talepDuzenlemeId=id;
+  switchTab('talep',2);
+  talepWizardGo(1);
+  renderTalepKalemList();
+  showToast('Düzenleme modunda — değişiklikleri kaydedin','info');
+  // Submit butonunu güncelle
+  const btn=document.getElementById('talep-submit-btn');
+  if(btn){btn.textContent='💾 Güncelle';btn.onclick=()=>talepGuncelle(id);}
+}
+
+async function talepGuncelle(id){
+  if(!talepKalemler.length){showToast('En az bir ürün ekleyin','err');return;}
+  const btn=document.getElementById('talep-submit-btn');
+  btn.disabled=true;btn.textContent='Güncelleniyor…';
+  try{
+    const termin=document.getElementById('t-termin').value;
+    const notlar=document.getElementById('t-notlar').value.trim();
+    const toplamAdet=talepKalemler.reduce((a,k)=>a+(parseFloat(k.miktar)||0),0);
+    const now=new Date().toLocaleString('tr-TR');
+    const{error}=await sb.from('konfeksiyon_talepleri').update({
+      ttarih:termin||null,
+      notlar:notlar||null,
+      kalemler:talepKalemler,
+      miktar:toplamAdet,
+      islem_gecmisi:`🔄 ${now} — Talep güncellendi.`
+    }).eq('id',id);
+    if(error)throw error;
+    showToast('✅ Talep güncellendi','ok');
+    window._talepDuzenlemeId=null;
+    talepKalemler=[];renderTalepKalemList();
+    ['t-termin','t-notlar'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    const sbtn=document.getElementById('talep-submit-btn');
+    if(sbtn){sbtn.textContent='🧵 Talebi Gönder';sbtn.onclick=()=>talepGonder();}
+    talepWizardGo(1);
+    switchTab('siparisler',0);
+    await loadSiparisler();
+  }catch(e){showToast('❌ Hata: '+(e.message||e),'err');}
+  btn.disabled=false;
+}
+
 
 async function toggleDetay(rawId){
   const panel=document.getElementById('detay-'+rawId);
@@ -554,8 +708,15 @@ async function toggleDetay(rawId){
   if(panel.innerHTML.trim()){return;}
   panel.innerHTML='<div class="loading" style="padding:20px"><div class="spinner"></div></div>';
   const isOnayPanel=String(rawId).startsWith('onay_');
-  const id=isOnayPanel?rawId.replace('onay_',''):rawId;
-  const s=siparisler.find(x=>String(x.id)==String(id)&&(isOnayPanel?x._onay:!x._onay));
+  const isTalepPanel=String(rawId).startsWith('talep_');
+  const id=isOnayPanel?rawId.replace('onay_',''):isTalepPanel?rawId.replace('talep_',''):rawId;
+  const s=siparisler.find(x=>String(x.id)==String(id)&&(isOnayPanel?x._onay:isTalepPanel?x._talep:(!x._onay&&!x._talep)));
+  
+  // Talep ise özel detay göster
+  if(isTalepPanel){
+    renderTalepDetay(s,panel);
+    return;
+  }
   const kd=await getKd(id,'KD_KONFEKSIYON');
   const k=parseKalemler(s||{});
   const sa=parseInt(s?.miktar)||k.reduce((a,x)=>a+(parseInt(x.miktar)||0),0);
