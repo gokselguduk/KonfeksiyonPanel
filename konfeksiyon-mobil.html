@@ -310,6 +310,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 let sb=null,currentUser=null,siparisler=[],selectedSiparis=null;
 let kdCache={},girisSeciliId=null,girisKd={},girisKalemler=[],girisTab='kesim';
 let aktifFilter='HEPSI',simteksIds=new Set(),devamdaIds=new Set();
+/* Arka plan prefetch — sipariş seçilince anında gelsin */
+async function prefetchKdData(){
+  const liste=(window._girisListesi||[]).slice(0,10);
+  for(const s of liste){
+    if(kdCache['KD_KONFEKSIYON_'+s.id]===undefined||kdCache['KD_URUN_AGACI_'+s.id]===undefined){
+      await Promise.all([getKd(s.id,'KD_KONFEKSIYON'),getKd(s.id,'KD_URUN_AGACI')]);
+      await new Promise(r=>setTimeout(r,100));
+    }
+  }
+}
 
 function initSB(){const c=window.__ERP_SUPABASE;if(!c||!c.url||!c.anonKey){showErr('erp-config.js yapılandırılmamış.');return false;}sb=supabase.createClient(c.url.trim(),c.anonKey.trim());return true;}
 
@@ -371,25 +381,24 @@ async function startApp(){
   document.getElementById('user-info').textContent=currentUser.display_name||currentUser.username;
   await loadSiparisler();
   switchTab('giris',0);
+  setTimeout(()=>prefetchKdData(),600);
 }
 
 async function loadSiparisler(){
   try{
-    const{data,error}=await sb.from('siparisler').select('*').order('created_at',{ascending:false});
-    if(error)throw error;
     const gizli=['TAMAMLANDI','İPTAL'];
-    const tumSiparisler=(data||[]).filter(s=>!gizli.includes(String(s.durum||'').toUpperCase().trim()));
+    /* Her iki sorguyu paralel at — biri diğerini beklemiyor */
+    const[sipRes,akisRes]=await Promise.all([
+      sb.from('siparisler').select('*').order('created_at',{ascending:false}),
+      sb.from('siparis_akis').select('siparis_id').eq('islem','KD_KONFEKSIYON')
+    ]);
+    if(sipRes.error)throw sipRes.error;
+    const tumSiparisler=(sipRes.data||[]).filter(s=>!gizli.includes(String(s.durum||'').toUpperCase().trim()));
     siparisler=tumSiparisler;
     simteksIds=new Set(siparisler.filter(isSimteksSiparis).map(s=>String(s.id)));
     window._girisListesi=siparisler.filter(isSimteksSiparis);
     devamdaIds=new Set();
-    if(tumSiparisler.length){
-      const{data:kdKonf}=await sb.from('siparis_akis')
-        .select('siparis_id')
-        .eq('islem','KD_KONFEKSIYON')
-        .in('siparis_id',tumSiparisler.map(s=>s.id));
-      (kdKonf||[]).forEach(r=>devamdaIds.add(String(r.siparis_id)));
-    }
+    (akisRes.data||[]).forEach(r=>devamdaIds.add(String(r.siparis_id)));
     renderSiparisler();
     populateSelects();
   }catch(e){document.getElementById('siparis-liste-card').innerHTML=`<div class="empty"><div class="icon">⚠️</div>Yüklenemedi: ${e.message}</div>`;}
@@ -543,7 +552,15 @@ async function girisLoadSiparis(){
   if(!id){area.innerHTML=`<div class="empty"><div class="icon">📝</div>Yukarıdan sipariş seçin</div>`;return;}
   girisSeciliId=id;
   girisKalemler=parseKalemler(siparisler.find(s=>s.id==id)||{});
-  area.innerHTML='<div class="loading"><div class="spinner"></div></div>';
+  /* Cache'te varsa spinner bile gösterme — anında aç */
+  if(kdCache['KD_KONFEKSIYON_'+id]!==undefined&&kdCache['KD_URUN_AGACI_'+id]!==undefined){
+    const[kd,kdUa]=await Promise.all([getKd(id,'KD_KONFEKSIYON'),getKd(id,'KD_URUN_AGACI')]);
+    girisKd={...kd};
+    if(!girisAktifAsama){girisAktifAsama=null;}
+    renderGirisAsamaTabs(kdUa);
+    return;
+  }
+  area.innerHTML='<div class="loading"><div class="spinner"></div><div style="margin-top:10px;font-size:12px;color:var(--text2)">Siparişler yükleniyor…</div></div>';
   const[kd,kdUa]=await Promise.all([getKd(id,'KD_KONFEKSIYON'),getKd(id,'KD_URUN_AGACI')]);
   girisKd={...kd};
   if(!girisAktifAsama){girisAktifAsama=null;}
