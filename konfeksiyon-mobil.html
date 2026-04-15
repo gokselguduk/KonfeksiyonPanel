@@ -220,6 +220,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="tab-btn active" onclick="switchTab('giris',0)">✏️ Veri Girişi</button>
     <button class="tab-btn" onclick="switchTab('siparisler',1)">📋 Siparişler</button>
     <button class="tab-btn" onclick="switchTab('log',2)">📋 İş Akışı</button>
+    <button class="tab-btn" onclick="switchTab('rayme',3)">🌟 Rayme Talepleri</button>
   </div>
 
   <div id="tab-giris" class="content">
@@ -260,6 +261,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
   </div>
 </div>
+
+  <div id="tab-rayme" class="content" style="display:none">
+    <div class="filter-row" id="rayme-filter-row">
+      <button class="filter-chip active" onclick="raymeSetFilter('HEPSI',this)">Tümü</button>
+      <button class="filter-chip" onclick="raymeSetFilter('BEKLEMEDE',this)">Bekleyen</button>
+      <button class="filter-chip" onclick="raymeSetFilter('DEVAMDA',this)">Devam Eden</button>
+      <button class="filter-chip" onclick="raymeSetFilter('TAMAMLANDI',this)">Tamamlanan</button>
+    </div>
+    <div id="rayme-liste"><div class="loading"><div class="spinner"></div><div>Yükleniyor…</div></div></div>
+  </div>
+
+  <!-- RAYME TALEP DETAY MODAL -->
+  <div id="rayme-modal" style="display:none;position:fixed;inset:0;z-index:200">
+    <div style="position:absolute;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px)" onclick="closeRaymeModal()"></div>
+    <div style="position:absolute;bottom:0;left:0;right:0;background:var(--surface);border-radius:22px 22px 0 0;max-height:92dvh;overflow-y:auto;overscroll-behavior:contain;animation:slideUp .3s cubic-bezier(.32,.72,0,1)">
+      <div style="width:36px;height:4px;background:var(--border2);border-radius:2px;margin:10px auto 0"></div>
+      <div style="padding:14px 16px 10px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:10">
+        <div style="font-size:17px;font-weight:800;margin-bottom:3px" id="rm-baslik">—</div>
+        <div style="font-size:12px;color:var(--text2)" id="rm-sub">—</div>
+        <div style="display:flex;gap:5px;margin-top:7px;flex-wrap:wrap" id="rm-tags"></div>
+      </div>
+      <div style="padding:14px" id="rm-body"></div>
+    </div>
+  </div>
 
 <div id="detay-modal">
   <div class="modal-backdrop" onclick="closeModal()"></div>
@@ -1045,10 +1070,137 @@ async function sbKdSet(id,tip,kd){
   kdCache[tip+'_'+id]=kd;
 }
 
+// ═══════════════════════════════════════
+// RAYME TALEPLERİ
+// ═══════════════════════════════════════
+let raymeTalepler=[], raymeFilter='HEPSI', seciliTalep=null;
+
+async function loadRaymeTalepleri(){
+  const liste=document.getElementById('rayme-liste');
+  liste.innerHTML='<div class="loading"><div class="spinner"></div><div>Yükleniyor…</div></div>';
+  try{
+    const{data,error}=await sb.from('konfeksiyon_talepleri')
+      .select('*').eq('firma','RAYME').order('created_at',{ascending:false});
+    if(error)throw error;
+    raymeTalepler=data||[];
+    renderRaymeListe();
+  }catch(e){
+    liste.innerHTML=`<div class="empty"><div class="icon">⚠️</div>${e.message}</div>`;
+  }
+}
+
+function raymeSetFilter(f,el){
+  raymeFilter=f;
+  document.querySelectorAll('#rayme-filter-row .filter-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderRaymeListe();
+}
+
+function renderRaymeListe(){
+  const liste=document.getElementById('rayme-liste');
+  let data=raymeTalepler;
+  if(raymeFilter==='BEKLEMEDE')data=data.filter(t=>t.durum==='BEKLEMEDE'||!t.durum);
+  else if(raymeFilter==='DEVAMDA')data=data.filter(t=>t.durum==='DEVAMDA'||t.durum==='DEVAM');
+  else if(raymeFilter==='TAMAMLANDI')data=data.filter(t=>t.durum==='TAMAMLANDI');
+
+  if(!data.length){liste.innerHTML='<div class="empty"><div class="icon">📭</div>Talep bulunamadı</div>';return;}
+
+  liste.innerHTML=data.map(t=>{
+    const k=Array.isArray(t.kalemler)?t.kalemler:[];
+    const urunler=k.slice(0,2).map(x=>x.ad).filter(Boolean).join(', ')+(k.length>2?` +${k.length-2}`:'');
+    const tarih=t.created_at?new Date(t.created_at).toLocaleDateString('tr-TR'):'';
+    const dRenk={'BEKLEMEDE':'var(--amber)','DEVAMDA':'var(--accent)','DEVAM':'var(--accent)','TAMAMLANDI':'var(--green)'}[t.durum]||'var(--text3)';
+    const dTag=`<span class="tag" style="background:${dRenk}22;color:${dRenk}">${t.durum||'BEKLEMEDE'}</span>`;
+    return `<div class="card" style="margin-bottom:8px;cursor:pointer" onclick="openRaymeTalep(${t.id})">
+      <div style="padding:13px 14px;display:flex;align-items:flex-start;gap:10px">
+        <div style="width:9px;height:9px;border-radius:50%;background:${dRenk};flex-shrink:0;margin-top:3px"></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;margin-bottom:2px">Rayme · ${tarih}</div>
+          <div style="font-size:11px;color:var(--text2);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(urunler||'—')}</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap">${dTag}${t.ttarih?`<span class="tag tag-gray">📅 ${t.ttarih}</span>`:''}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:17px;font-weight:800">${t.miktar||'—'}</div>
+          <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">adet</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openRaymeTalep(id){
+  seciliTalep=raymeTalepler.find(t=>t.id===id);
+  if(!seciliTalep)return;
+  const t=seciliTalep;
+  const k=Array.isArray(t.kalemler)?t.kalemler:[];
+  const tarih=t.created_at?new Date(t.created_at).toLocaleDateString('tr-TR'):'';
+  const dRenk={'BEKLEMEDE':'var(--amber)','DEVAMDA':'var(--accent)','TAMAMLANDI':'var(--green)'}[t.durum]||'var(--text3)';
+
+  document.getElementById('rm-baslik').textContent='Rayme Konfeksiyon Talebi';
+  document.getElementById('rm-sub').textContent=`${tarih} · ${t.miktar||'—'} adet`;
+  document.getElementById('rm-tags').innerHTML=`<span class="tag" style="background:${dRenk}22;color:${dRenk}">${t.durum||'BEKLEMEDE'}</span>${t.ttarih?`<span class="tag tag-gray">📅 ${t.ttarih}</span>`:''}`;
+
+  // Ürünler
+  const urunHtml=k.map(x=>{
+    const rkodler=[x.rkod1,x.rkod2,x.rkod3,x.rkod4,x.rkod5,x.rkod6].filter(Boolean).join(', ');
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:6px">
+      <div style="font-size:12px;font-weight:700">${esc(x.ad||'—')}</div>
+      <div style="font-size:10px;color:var(--text2);margin-top:2px">${[x.ebat,x.renk].filter(Boolean).join(' · ')||'—'}</div>
+      ${x.kod?`<div style="font-size:9px;color:var(--accent2);margin-top:1px">Kod: ${esc(x.kod)}</div>`:''}
+      ${rkodler?`<div style="font-size:9px;color:var(--text3);margin-top:1px">RK: ${esc(rkodler)}</div>`:''}
+      <div style="font-size:14px;font-weight:800;color:var(--green);margin-top:4px">${x.miktar||'—'} adet</div>
+    </div>`;
+  }).join('');
+
+  // Durum butonları
+  const durumHtml=`
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:12px">
+      <button onclick="raymeSetDurum('BEKLEMEDE')" style="padding:10px 4px;border-radius:9px;border:1px solid ${t.durum==='BEKLEMEDE'?'var(--amber)':'var(--border2)'};background:${t.durum==='BEKLEMEDE'?'rgba(245,158,11,.15)':'var(--surface2)'};color:${t.durum==='BEKLEMEDE'?'var(--amber)':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer">⏳ Beklemede</button>
+      <button onclick="raymeSetDurum('DEVAMDA')" style="padding:10px 4px;border-radius:9px;border:1px solid ${t.durum==='DEVAMDA'?'var(--accent)':'var(--border2)'};background:${t.durum==='DEVAMDA'?'rgba(99,102,241,.15)':'var(--surface2)'};color:${t.durum==='DEVAMDA'?'var(--accent2)':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer">⚙️ Devam</button>
+      <button onclick="raymeSetDurum('TAMAMLANDI')" style="padding:10px 4px;border-radius:9px;border:1px solid ${t.durum==='TAMAMLANDI'?'var(--green)':'var(--border2)'};background:${t.durum==='TAMAMLANDI'?'rgba(16,185,129,.15)':'var(--surface2)'};color:${t.durum==='TAMAMLANDI'?'var(--green)':'var(--text3)'};font-size:10px;font-weight:700;cursor:pointer">✅ Tamamlandı</button>
+    </div>`;
+
+  document.getElementById('rm-body').innerHTML=`
+    <div class="info-row"><span class="info-key">Firma</span><span class="info-val" style="color:var(--gold,#c9a84c);font-weight:800">RAYME</span></div>
+    <div class="info-row"><span class="info-key">Termin</span><span class="info-val" style="color:var(--red)">${t.ttarih||'—'}</span></div>
+    <div class="info-row"><span class="info-key">Toplam Adet</span><span class="info-val" style="color:var(--green);font-weight:800">${t.miktar||'—'}</span></div>
+    ${t.notlar?`<div class="info-row"><span class="info-key">Notlar</span><span class="info-val" style="max-width:60%;font-size:10px">${esc(t.notlar)}</span></div>`:''}
+    <div class="sec-title" style="margin-top:12px;margin-bottom:8px">Ürünler (${k.length} kalem)</div>
+    ${urunHtml}
+    <div class="sec-title" style="margin-top:12px;margin-bottom:6px">Durum Güncelle</div>
+    ${durumHtml}`;
+
+  document.getElementById('rayme-modal').style.display='block';
+}
+
+function closeRaymeModal(){
+  document.getElementById('rayme-modal').style.display='none';
+  seciliTalep=null;
+}
+
+async function raymeSetDurum(yeniDurum){
+  if(!seciliTalep)return;
+  try{
+    const{error}=await sb.from('konfeksiyon_talepleri')
+      .update({durum:yeniDurum})
+      .eq('id',seciliTalep.id);
+    if(error)throw error;
+    seciliTalep.durum=yeniDurum;
+    // Cache güncelle
+    const idx=raymeTalepler.findIndex(t=>t.id===seciliTalep.id);
+    if(idx!==-1)raymeTalepler[idx].durum=yeniDurum;
+    showToast(yeniDurum==='TAMAMLANDI'?'✅ Tamamlandı':'✅ Durum güncellendi');
+    closeRaymeModal();
+    renderRaymeListe();
+  }catch(e){showToast('❌ Hata: '+(e.message||e));}
+}
+
+
 function switchTab(t,idx){
-  ['giris','siparisler','log'].forEach(id=>{const el=document.getElementById('tab-'+id);if(el)el.style.display=id===t?'':'none';});
+  ['giris','siparisler','log','rayme'].forEach(id=>{const el=document.getElementById('tab-'+id);if(el)el.style.display=id===t?'':'none';});
   document.querySelectorAll('#main-tab-bar .tab-btn').forEach((b,i)=>b.classList.toggle('active',i===idx));
   if(t==='log'&&logTumData.length===0)logLoadAll();
+  if(t==='rayme')loadRaymeTalepleri();
 }
 
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
