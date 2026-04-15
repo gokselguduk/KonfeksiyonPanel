@@ -316,7 +316,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;ba
   </div>
 
 <!-- TALEP KALEM MODAL -->
-<div id="talep-kalem-modal">
+<div id="talep-kalem-modal" style="display:none;position:fixed;inset:0;z-index:200">
   <div class="modal-bg" onclick="talepKalemModalKapat()"></div>
   <div class="modal-sheet" style="padding-bottom:40px;max-height:85dvh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
@@ -577,21 +577,78 @@ async function toggleDetay(rawId){
     kalemHtml+='</div>';
   }
 
+  // siparis_akis loglarını çek
+  const{data:logData}=await sb.from('siparis_akis')
+    .select('islem,miktar,kalem_ad,notlar,created_at')
+    .eq('siparis_id',id)
+    .not('islem','in','("KD_KONFEKSIYON","KD_URUN_AGACI","KD_DOKUMA")')
+    .order('created_at',{ascending:true});
+  const logs=logData||[];
+
+  const LOG_META={
+    'KESİM':    {ikon:'✂️',renk:'#8b5cf6'},
+    'KESIM':    {ikon:'✂️',renk:'#8b5cf6'},
+    'DİKİM':    {ikon:'🧵',renk:'#ec4899'},
+    'DIKIM':    {ikon:'🧵',renk:'#ec4899'},
+    'YIKAMA':   {ikon:'💧',renk:'#06b6d4'},
+    'KALİTE':   {ikon:'🔍',renk:'#f59e0b'},
+    'KALITE':   {ikon:'🔍',renk:'#f59e0b'},
+    'KALITE KONTROL':{ikon:'🔍',renk:'#f59e0b'},
+    'KOLİ':     {ikon:'📦',renk:'#10b981'},
+    'KOLI':     {ikon:'📦',renk:'#10b981'},
+    'SEVK':     {ikon:'🚚',renk:'#6366f1'},
+    'NAKIŞ':    {ikon:'🪡',renk:'#f472b6'},
+    'BASKI':    {ikon:'🖨️',renk:'#fb923c'},
+  };
+  function logMeta(islem){
+    const k=String(islem||'').toUpperCase();
+    for(const [key,val] of Object.entries(LOG_META)){if(k.includes(key))return val;}
+    return {ikon:'📝',renk:'var(--accent2)'};
+  }
+
+  const logHtml=logs.length?logs.map(r=>{
+    const m=logMeta(r.islem);
+    const tarih=r.created_at?new Date(r.created_at).toLocaleString('tr-TR'):'—';
+    let notStr='';
+    try{
+      const p=JSON.parse(r.notlar||'{}');
+      const parcalar=[];
+      if(p.urun_ad||p.ad)parcalar.push(p.urun_ad||p.ad);
+      if(p.ebat)parcalar.push(p.ebat);
+      if(p.renk)parcalar.push(p.renk);
+      notStr=parcalar.join(' · ');
+    }catch{notStr=r.notlar||'';}
+    return `<div style="border-left:3px solid ${m.renk};padding:8px 10px;margin-bottom:6px;background:var(--surface2);border-radius:0 8px 8px 0">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div>
+          <span style="font-size:11px;font-weight:800;color:${m.renk}">${m.ikon} ${esc(r.islem||'')}</span>
+          ${r.miktar?`<span style="font-size:10px;color:${m.renk};background:${m.renk}22;padding:1px 7px;border-radius:999px;margin-left:5px;font-weight:700">${r.miktar} adet</span>`:''}
+        </div>
+        <div style="font-size:9px;color:var(--text3);text-align:right;flex-shrink:0">${tarih}</div>
+      </div>
+      ${notStr?`<div style="font-size:10px;color:var(--text2);margin-top:3px">${esc(notStr)}</div>`:''}
+    </div>`;
+  }).join(''):`<div style="font-size:11px;color:var(--text3);padding:10px 0">Henüz üretim kaydı yok</div>`;
+
   panel.innerHTML=`
     <div style="padding:0 14px 14px">
-      <div class="info-row"><span class="info-key">Sipariş No</span><span class="info-val">${esc(s?.sno||'—')}</span></div>
+      <div class="info-row"><span class="info-key">Sipariş No</span><span class="info-val" style="color:var(--gold2);font-weight:800">${esc(s?.sno||'—')}</span></div>
       <div class="info-row"><span class="info-key">Sipariş Tarihi</span><span class="info-val">${esc(s?.starih||'—')}</span></div>
-      <div class="info-row"><span class="info-key">Termin</span><span class="info-val">${esc(s?.ttarih||'—')}</span></div>
+      <div class="info-row"><span class="info-key">Termin</span><span class="info-val" style="color:var(--red)">${esc(s?.ttarih||'—')}</span></div>
       <div class="info-row"><span class="info-key">Durum</span><span class="info-val">${dTag(s?.durum)}</span></div>
       ${s?.notlar?`<div class="info-row"><span class="info-key">Not</span><span class="info-val" style="max-width:60%;font-size:10px">${esc(s.notlar)}</span></div>`:''}
-      ${sa>0?`<div class="bar-wrap" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-        <div class="sec-title" style="margin-bottom:8px">Üretim Durumu</div>
+      ${sa>0?`<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <div class="sec-title" style="margin-bottom:8px">📊 Üretim Özeti</div>
         ${bRow('KESİM',kes,sa,'#8b5cf6')}
         ${bRow('DİKİM',dik,sa,'#ec4899')}
         ${bRow('KALİTE',kk,sa,'#f59e0b')}
         ${bRow('KOLİ',kol,sa,'#10b981')}
       </div>`:''}
       ${kalemHtml}
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <div class="sec-title" style="margin-bottom:8px">📋 Üretim Geçmişi</div>
+        ${logHtml}
+      </div>
     </div>`;
 }
 
