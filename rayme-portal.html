@@ -466,8 +466,10 @@ async function startApp(){
   const bugun=new Date().toISOString().split('T')[0];
   const starihEl=document.getElementById('f-starih');
   if(starihEl)starihEl.value=bugun;
+  switchTab('siparisler',0);
   await Promise.all([loadSiparisler(), nextSiparisNo()]);
   renderKalemList();
+  renderTalepKalemList();
 }
 
 async function loadSiparisler(){
@@ -963,6 +965,8 @@ async function loadRapor(){
     const onaylilar=onayliData||[];
     const bekleyenler=bekleyenData||[];
     const talepler=talepData||[];
+    const aktifTalepler=talepler.filter(s=>s.durum!=='TAMAMLANDI');
+    const tamamlananTalepler=talepler.filter(s=>s.durum==='TAMAMLANDI');
     const aktif=onaylilar.filter(s=>s.durum!=='TAMAMLANDI');
     const tamamlanan=onaylilar.filter(s=>s.durum==='TAMAMLANDI');
     const toplamAdet=onaylilar.reduce((a,s)=>a+(parseInt(s.miktar)||0),0);
@@ -991,8 +995,8 @@ async function loadRapor(){
           <div style="font-size:10px;color:var(--text3);margin-top:4px">${bekAdet} adet</div>
         </div>
         <div class="kpi-box">
-          <div class="kpi-val" style="color:var(--pink,#ec4899)">${talepler.length}</div>
-          <div class="kpi-lbl">Konf. Talebi</div>
+          <div class="kpi-val" style="color:var(--pink,#ec4899)">${aktifTalepler.length}</div>
+          <div class="kpi-lbl">Aktif Talep</div>
           <div style="font-size:10px;color:var(--text3);margin-top:4px">${talepAdet} adet</div>
         </div>
       </div>`;
@@ -1064,7 +1068,7 @@ async function loadRapor(){
     }).join(''):'<div class="empty" style="padding:16px"><div class="icon">📭</div>Tamamlanan sipariş yok</div>';
 
     // Konfeksiyon Talepleri
-    const talepHtml=talepler.length?talepler.map(s=>{
+    const talepHtml=aktifTalepler.length?aktifTalepler.map(s=>{
       const k=Array.isArray(s.kalemler)?s.kalemler:[];
       const tarih=s.created_at?new Date(s.created_at).toLocaleDateString('tr-TR'):'';
       return `<div style="background:rgba(236,72,153,.05);border:1px solid rgba(236,72,153,.2);border-radius:10px;padding:11px 13px;margin-bottom:6px">
@@ -1088,13 +1092,42 @@ async function loadRapor(){
         </div>`:''}
         ${s.notlar?`<div style="font-size:10px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:1px solid rgba(236,72,153,.15)">${esc(s.notlar)}</div>`:''}
       </div>`;
-    }).join(''):'<div class="empty" style="padding:16px"><div class="icon">📭</div>Konfeksiyon talebi yok</div>';
+    }).join(''):'<div class="empty" style="padding:16px"><div class="icon">📭</div>Aktif konfeksiyon talebi yok</div>';
 
+
+    // Tamamlanan Konfeksiyon Talepleri
+    const tamamlananTalepHtml=tamamlananTalepler.length?tamamlananTalepler.map(s=>{
+      const k=Array.isArray(s.kalemler)?s.kalemler:[];
+      const tarih=s.created_at?new Date(s.created_at).toLocaleDateString('tr-TR'):'';
+      const tamTarih=s.updated_at?new Date(s.updated_at).toLocaleDateString('tr-TR'):'';
+      return `<div style="background:rgba(45,212,160,.05);border:1px solid rgba(45,212,160,.2);border-radius:10px;padding:11px 13px;margin-bottom:6px;opacity:.85">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-size:10px;font-weight:700;color:var(--green)">✅ Tamamlanan Konfeksiyon Talebi</div>
+            <div style="font-size:11px;color:var(--text);margin-top:3px;font-weight:600">${k.slice(0,2).map(x=>x.ad).filter(Boolean).join(', ')+(k.length>2?' +'+( k.length-2):'')}</div>
+            ${s.ttarih?`<div style="font-size:10px;color:var(--text3);margin-top:2px">📅 Termin: ${s.ttarih}</div>`:''}
+            <div style="font-size:9px;color:var(--text3);margin-top:3px">Oluşturuldu: ${tarih}${tamTarih?' · Tamamlandı: '+tamTarih:''}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:18px;font-weight:800;color:var(--green)">${s.miktar||'—'}</div>
+            <div style="font-size:9px;color:var(--text3)">adet</div>
+          </div>
+        </div>
+        ${k.length?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(45,212,160,.15)">
+          ${k.map(x=>`<div style="display:flex;justify-content:space-between;font-size:10px;padding:3px 0;color:var(--text2)">
+            <span>${esc([x.ad,x.renk,x.ebat].filter(Boolean).join(' · '))}</span>
+            <span style="font-weight:700">${x.miktar||'—'} adet</span>
+          </div>`).join('')}
+        </div>`:''}
+        ${s.notlar?`<div style="font-size:10px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:1px solid rgba(45,212,160,.15)">${esc(s.notlar)}</div>`:''}
+      </div>`;
+    }).join(''):'<div class="empty" style="padding:16px"><div class="icon">📭</div>Tamamlanan talep yok</div>';
     area.innerHTML=kpiHtml+
       `<div class="sec-title" style="margin-bottom:8px">⏳ Onay Bekleyen Siparişler</div>`+bekleyenHtml+
       `<div class="sec-title" style="margin-top:16px;margin-bottom:8px">📋 Aktif Siparişler</div>`+aktifHtml+
       `<div class="sec-title" style="margin-top:16px;margin-bottom:8px">✅ Tamamlanan Siparişler</div>`+tamamlananHtml+
-      `<div class="sec-title" style="margin-top:16px;margin-bottom:8px">🧵 Konfeksiyon Talepleri</div>`+talepHtml;
+      `<div class="sec-title" style="margin-top:16px;margin-bottom:8px">🧵 Aktif Konfeksiyon Talepleri</div>`+talepHtml+
+      `<div class="sec-title" style="margin-top:16px;margin-bottom:8px">✅ Tamamlanan Konfeksiyon Talepleri</div>`+tamamlananTalepHtml;
   }catch(e){
     area.innerHTML=`<div class="empty"><div class="icon">⚠️</div>${e.message}</div>`;
   }
