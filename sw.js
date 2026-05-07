@@ -1,10 +1,10 @@
-const CACHE_NAME = "konfeksiyon-panel-v1";
+const CACHE_NAME = "konfeksiyon-panel-v2";
 const APP_SHELL = [
   "./",
   "./konfeksiyon-mobil.html",
   "./erp-config.js",
   "./manifest.webmanifest",
-  "./icon-s.svg"
+  "./app-icon.png"
 ];
 
 self.addEventListener("install", (event) => {
