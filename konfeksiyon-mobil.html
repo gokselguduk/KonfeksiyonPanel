@@ -6,11 +6,13 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Konfeksiyon">
+<meta name="apple-mobile-web-app-title" content="Konfeksiyon Panel">
 <meta name="theme-color" content="#0f1117">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%236366f1'/%3E%3Cstop offset='100%25' stop-color='%238b5cf6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='128' height='128' rx='28' fill='url(%23g)'/%3E%3Ctext x='64' y='86' text-anchor='middle' font-size='78' font-family='Arial,Helvetica,sans-serif' font-weight='700' fill='white'%3ES%3C/text%3E%3C/svg%3E">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%236366f1'/%3E%3Cstop offset='100%25' stop-color='%238b5cf6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='180' height='180' rx='40' fill='url(%23g)'/%3E%3Ctext x='90' y='122' text-anchor='middle' font-size='108' font-family='Arial,Helvetica,sans-serif' font-weight='700' fill='white'%3ES%3C/text%3E%3C/svg%3E">
-<title>Konfeksiyon Paneli · Simteks</title>
+<meta name="description" content="Konfeksiyon Panel mobil uygulaması">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" href="https://simtekstekstil.com.tr/resimler/logo.png">
+<link rel="apple-touch-icon" href="https://simtekstekstil.com.tr/resimler/logo.png">
+<title>Konfeksiyon Panel · Simteks</title>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script src="erp-config.js"></script>
 <style>
@@ -1309,7 +1311,13 @@ document.addEventListener('focusout',(e)=>{
   }catch{}
 },true);
 
-window.addEventListener('DOMContentLoaded',()=>{if(!initSB())return;if(tryRestoreSession())startApp();});
+window.addEventListener('DOMContentLoaded',()=>{
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  }
+  if(!initSB())return;
+  if(tryRestoreSession())startApp();
+});
 </script>
 </body>
 </html>

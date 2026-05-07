@@ -1,0 +1,25 @@
+{
+  "name": "Konfeksiyon Panel",
+  "short_name": "Konfeksiyon Panel",
+  "description": "Simteks Konfeksiyon Panel mobil uygulaması",
+  "start_url": "./konfeksiyon-mobil.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1117",
+  "theme_color": "#0f1117",
+  "icons": [
+    {
+      "src": "https://simtekstekstil.com.tr/resimler/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://simtekstekstil.com.tr/resimler/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
