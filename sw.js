@@ -4,7 +4,7 @@ const APP_SHELL = [
   "./konfeksiyon-mobil.html",
   "./erp-config.js",
   "./manifest.webmanifest",
-  "https://simtekstekstil.com.tr/resimler/logo.png"
+  "./icon-s.svg"
 ];
 
 self.addEventListener("install", (event) => {
