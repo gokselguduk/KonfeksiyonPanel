@@ -315,6 +315,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button class="modal-tab active" onclick="modalTab('ozet',this)">Özet</button>
       <button class="modal-tab" onclick="modalTab('kalemler',this)">Kalemler</button>
       <button class="modal-tab" onclick="modalTab('konfeksiyon',this)">Konfeksiyon</button>
+      <button class="modal-tab" onclick="modalTab('resimler',this)">Resimler</button>
+      <button class="modal-tab" onclick="modalTab('notlar',this)">Notlar</button>
     </div>
     <div class="modal-body" id="modal-body"></div>
   </div>
@@ -354,7 +356,7 @@ async function restoreUiState(){
     const sel=document.getElementById('giris-siparis-sel');
     const varMi=siparisler.some(s=>String(s.id)===hedefId);
     if(sel && varMi){
-      if(st?.girisAsama)girisAktifAsama=st.girisAsama;
+      girisAktifAsama=null;
       sel.value=hedefId;
       await girisLoadSiparis();
     }
@@ -617,6 +619,65 @@ function openSiparis(id){
 function closeModal(){document.getElementById('detay-modal').style.display='none';selectedSiparis=null;}
 function modalTab(t,el){document.querySelectorAll('.modal-tab').forEach(b=>b.classList.remove('active'));el.classList.add('active');renderModalTab(t);}
 
+function uniq(arr){return [...new Set((arr||[]).filter(Boolean))];}
+function isHttpUrl(u){return /^https?:\/\//i.test(String(u||'').trim());}
+function parseMaybeJson(v){
+  if(!v) return null;
+  if(typeof v==='object') return v;
+  try{return JSON.parse(v);}catch{return null;}
+}
+function collectSiparisResimleri(s){
+  const adayAlanlar=[
+    s?.resim_url,s?.resim,s?.gorsel,s?.gorsel_url,s?.image,s?.image_url,
+    s?.urun_resim,s?.urun_resim_url,s?.model_resim,s?.model_resim_url
+  ];
+  const jsonAlanlar=[s?.notlar,s?.aciklama,s?.ek_bilgi,s?.detay];
+  const kalemler=parseKalemler(s);
+  kalemler.forEach(k=>{
+    adayAlanlar.push(k?.resim,k?.resim_url,k?.gorsel,k?.gorsel_url,k?.image,k?.image_url,k?.foto,k?.foto_url);
+  });
+
+  const urls=[];
+  adayAlanlar.forEach(v=>{
+    if(typeof v==='string'&&isHttpUrl(v))urls.push(v.trim());
+    if(Array.isArray(v))v.forEach(x=>{if(typeof x==='string'&&isHttpUrl(x))urls.push(x.trim());});
+  });
+  jsonAlanlar.forEach(raw=>{
+    const j=parseMaybeJson(raw);
+    if(!j) return;
+    const vals=[
+      j.resim,j.resim_url,j.gorsel,j.gorsel_url,j.image,j.image_url,j.foto,j.foto_url,j.url,
+      ...(Array.isArray(j.resimler)?j.resimler:[]),
+      ...(Array.isArray(j.images)?j.images:[])
+    ];
+    vals.forEach(v=>{if(typeof v==='string'&&isHttpUrl(v))urls.push(v.trim());});
+  });
+  return uniq(urls);
+}
+
+function collectSiparisNotlari(s){
+  const notlar=[];
+  const ekle=(baslik,deger)=>{
+    const txt=String(deger||'').trim();
+    if(!txt) return;
+    notlar.push({baslik,icerik:txt});
+  };
+  ekle('Sipariş Notu',s?.notlar);
+  ekle('Açıklama',s?.aciklama);
+  ekle('Ek Bilgi',s?.ek_bilgi);
+  ekle('Müşteri Notu',s?.musteri_notu);
+
+  const jsonAdaylar=[s?.notlar,s?.aciklama,s?.ek_bilgi,s?.detay];
+  jsonAdaylar.forEach(raw=>{
+    const j=parseMaybeJson(raw);
+    if(!j||typeof j!=='object')return;
+    ['not','notlar','aciklama','aciklama2','musteri_notu','uretim_notu','kalite_notu'].forEach(k=>{
+      if(j[k]) ekle('Form Notu',j[k]);
+    });
+  });
+  return notlar;
+}
+
 async function renderModalTab(t){
   const body=document.getElementById('modal-body');const s=selectedSiparis;if(!s)return;
   if(t==='ozet'){
@@ -659,6 +720,39 @@ async function renderModalTab(t){
       <div class="info-row"><div class="info-key">Hat</div><div class="info-val">${esc(kd.dikim_hat||'—')}</div></div>
       <div class="info-row"><div class="info-key">Operatör Sayısı</div><div class="info-val">${esc(kd.dikim_operator_sayi||'—')}</div></div>`:''}
     ${kd.kapama_tarih?`<div class="info-row" style="margin-top:8px"><div class="info-key">Kapama Tarihi</div><div class="info-val">${esc(kd.kapama_tarih)}</div></div>`:''}`;
+    return;
+  }
+  if(t==='resimler'){
+    const urls=collectSiparisResimleri(s);
+    if(!urls.length){
+      body.innerHTML=`<div class="empty"><div class="icon">🖼️</div>Bu sipariş için kayıtlı resim bulunamadı</div>`;
+      return;
+    }
+    body.innerHTML=`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${urls.map(u=>`
+          <a href="${esc(u)}" target="_blank" rel="noopener noreferrer"
+             style="display:block;background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;text-decoration:none">
+            <img src="${esc(u)}" alt="Sipariş görseli" style="width:100%;height:140px;object-fit:cover;display:block">
+            <div style="font-size:10px;color:var(--text2);padding:6px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Resmi Aç</div>
+          </a>
+        `).join('')}
+      </div>`;
+    return;
+  }
+  if(t==='notlar'){
+    const list=collectSiparisNotlari(s);
+    if(!list.length){
+      body.innerHTML=`<div class="empty"><div class="icon">📝</div>Bu sipariş için not bulunamadı</div>`;
+      return;
+    }
+    body.innerHTML=list.map(n=>`
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px">
+        <div style="font-size:10px;font-weight:800;letter-spacing:.5px;color:var(--accent2);text-transform:uppercase;margin-bottom:5px">${esc(n.baslik)}</div>
+        <div style="font-size:12px;line-height:1.5;color:var(--text)">${esc(n.icerik)}</div>
+      </div>
+    `).join('');
+    return;
   }
 }
 
@@ -684,6 +778,7 @@ async function girisLoadSiparis(){
   const area=document.getElementById('giris-form-area');
   if(!id){area.innerHTML=`<div class="empty"><div class="icon">📝</div>Yukarıdan sipariş seçin</div>`;return;}
   girisSeciliId=id;
+  girisAktifAsama=null;
   writeUiState({girisSiparisId:String(id)});
   girisKalemler=parseKalemler(siparisler.find(s=>s.id==id)||{});
   /* Multi-device uyumu: sipariş açılışında güncel veriyi zorla çek */
@@ -705,32 +800,59 @@ let girisAktifAsama=null;
 
 const UA_ASAMALAR_MAP={
   dokuma:{label:'Dokuma',ikon:'🧶',color:'#a78bfa'},
+  boya:{label:'Boya',ikon:'🎨',color:'#60a5fa'},
   kesim:{label:'Kesim',ikon:'✂️',color:'#8b5cf6'},
   yikama:{label:'Yıkama',ikon:'💧',color:'#06b6d4'},
   dikim:{label:'Dikim',ikon:'🧵',color:'#ec4899'},
   nakis:{label:'Nakış',ikon:'🪡',color:'#f472b6'},
   baskı:{label:'Baskı',ikon:'🖨️',color:'#fb923c'},
   ütü:{label:'Ütü/Apre',ikon:'♨️',color:'#94a3b8'},
+  sacak_baglama:{label:'Saçak Bağlama',ikon:'🪢',color:'#14b8a6'},
   kalite:{label:'Kalite',ikon:'🔍',color:'#f59e0b'},
   koli:{label:'Koli',ikon:'📦',color:'#10b981'},
   sevk:{label:'Sevk',ikon:'🚚',color:'#6366f1'},
 };
 
+function normalizeAsamaAdi(a){
+  const t=normText(a);
+  if(!t) return null;
+  if(t.includes('dokuma')) return 'dokuma';
+  if(t.includes('boya')) return 'boya';
+  if(t.includes('kesim')) return 'kesim';
+  if(t.includes('yikama')) return 'yikama';
+  if(t.includes('dikim')) return 'dikim';
+  if(t.includes('nakis')) return 'nakis';
+  if(t.includes('baski')) return 'baskı';
+  if(t.includes('utu') || t.includes('apre')) return 'ütü';
+  if((t.includes('sacak') && t.includes('bag')) || t.includes('sacak baglama')) return 'sacak_baglama';
+  if(t.includes('kalite') || t==='kk') return 'kalite';
+  if(t.includes('koli') || t.includes('paket') || t.includes('paketleme')) return 'koli';
+  if(t.includes('sevk')) return 'sevk';
+  return null;
+}
+
 function getAsamalar(kdUa,kalemler){
   const set=new Set();
   kalemler.forEach((_,i)=>{
     const ua=kdUa['u_'+i]||{};
-    (ua.asamalar||ua.teknik_genel?.asamalar||[]).forEach(a=>set.add(a));
+    (ua.asamalar||ua.teknik_genel?.asamalar||[]).forEach(a=>{
+      const n=normalizeAsamaAdi(a);
+      if(n) set.add(n);
+    });
   });
-  if(set.size===0)['kesim','dikim','kalite','koli'].forEach(a=>set.add(a));
-  const panelAsamalari=['kesim','yikama','dikim','nakis','baskı','ütü','kalite','koli'];
+  // Kural: dokuma ve boya görünmeyecek, sevk her durumda görünecek.
+  set.delete('dokuma');
+  set.delete('boya');
+  set.add('sevk');
+  if(set.size===1)['kesim','dikim','kalite','koli'].forEach(a=>set.add(a)); // sadece sevk kaldıysa fallback
+  const panelAsamalari=['kesim','yikama','dikim','nakis','baskı','ütü','sacak_baglama','kalite','koli','sevk'];
   return panelAsamalari.filter(a=>set.has(a));
 }
 
 function renderGirisAsamaTabs(kdUa){
   const area=document.getElementById('giris-form-area');
   const asamalar=getAsamalar(kdUa,girisKalemler);
-  if(!girisAktifAsama||!asamalar.includes(girisAktifAsama))girisAktifAsama=asamalar[0]||null;
+  if(girisAktifAsama && !asamalar.includes(girisAktifAsama))girisAktifAsama=null;
 
   // Tab bar
   const tabs=asamalar.map(a=>{
@@ -742,7 +864,12 @@ function renderGirisAsamaTabs(kdUa){
   const tabHtml=`<div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;margin-bottom:12px">${tabs}</div>`;
 
   // İçerik
-  const icerik=girisAktifAsama?renderAsamaIcerik(girisAktifAsama):'';
+  const icerik=girisAktifAsama
+    ? renderAsamaIcerik(girisAktifAsama)
+    : `<div class="empty" style="padding:26px 20px;background:var(--surface);border:1px solid var(--border);border-radius:12px">
+         <div class="icon">👆</div>
+         Önce yapılacak işlemi seçin, ardından giriş alanı açılır.
+       </div>`;
 
   area.innerHTML=tabHtml+icerik;
 }
@@ -767,6 +894,7 @@ function renderAsamaIcerik(asama){
     nakis:{yapilan:'nakis_adet',fire:null,yapilanLabel:'Nakış Yapılan',fireLabel:null},
     'baskı':{yapilan:'baski_adet',fire:null,yapilanLabel:'Baskı Yapılan',fireLabel:null},
     ütü:{yapilan:'utu_adet',fire:null,yapilanLabel:'Ütü Yapılan',fireLabel:null},
+    sacak_baglama:{yapilan:'sacak_baglama_adet',fire:null,yapilanLabel:'Bağlanan',fireLabel:null},
     kalite:{yapilan:'kk_gecen',fire:null,yapilanLabel:'KK Geçen',fireLabel:null},
     koli:{yapilan:'kolide',fire:null,yapilanLabel:'Kolide',fireLabel:null},
     sevk:{yapilan:'sevk_adet',fire:null,yapilanLabel:'Sevk Edilen',fireLabel:null},
@@ -891,7 +1019,7 @@ function renderAsamaIcerik(asama){
     }).join('');
   }
 
-  const saveMap={kesim:'kesim',yikama:'yikama',dikim:'dikim',nakis:'nakis',baskı:'baski',ütü:'utu',kalite:'kk',koli:'koli',sevk:'sevk'};
+  const saveMap={kesim:'kesim',yikama:'yikama',dikim:'dikim',nakis:'nakis',baskı:'baski',ütü:'utu',sacak_baglama:'sacak_baglama',kalite:'kk',koli:'koli',sevk:'sevk'};
   const saveTip=saveMap[asama]||asama;
 
   return ozet+`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px">${urunHtml}</div>`+`<button class="save-btn" style="background:${m.color}" onclick="girisKaydet('${saveTip}')">💾 ${m.ikon} ${m.label.toUpperCase()} KAYDET</button>`;
@@ -1181,6 +1309,12 @@ async function girisKaydet(tip){
       k.forEach((_,i)=>{if(!kd['kalem_'+i])kd['kalem_'+i]={};
         const ak=gi('k-kolide-'+i);
         if(ak){kd['kalem_'+i].kolide=(parseInt(kd['kalem_'+i].kolide||0)||0)+ak;putDelta(i,'kolide',ak);}});
+    }else if(['yikama','nakis','baski','utu','sacak_baglama','sevk'].includes(tip)){
+      const tipAlanMap={yikama:'yikama_sevk',nakis:'nakis_adet',baski:'baski_adet',utu:'utu_adet',sacak_baglama:'sacak_baglama_adet',sevk:'sevk_adet'};
+      const alan=tipAlanMap[tip];
+      k.forEach((_,i)=>{if(!kd['kalem_'+i])kd['kalem_'+i]={};
+        const ak=gi('k-'+alan+'-'+i);
+        if(ak){kd['kalem_'+i][alan]=(parseInt(kd['kalem_'+i][alan]||0)||0)+ak;putDelta(i,alan,ak);}});
     }
     let tK=0,tD=0,tKK=0,tKol=0,tH=0;
     k.forEach((_,i)=>{const ki=kd['kalem_'+i]||{};
@@ -1197,9 +1331,9 @@ async function girisKaydet(tip){
     girisKd={...kd};
 
     // İş akışı logu — her kalem için ayrı kayıt
-    const islemAdMap={kesim:'KESİM',dikim:'DİKİM',kk:'KALİTE KONTROL',koli:'KOLİ',yikama:'YIKAMA',nakis:'NAKIŞ',baski:'BASKI',utu:'ÜTÜ',sevk:'SEVK'};
+    const islemAdMap={kesim:'KESİM',dikim:'DİKİM',kk:'KALİTE KONTROL',koli:'KOLİ',yikama:'YIKAMA',nakis:'NAKIŞ',baski:'BASKI',utu:'ÜTÜ',sacak_baglama:'SAÇAK BAĞLAMA',sevk:'SEVK'};
     const islemAdi=islemAdMap[tip]||tip.toUpperCase();
-    const alanMap={kesim:'kesilen',dikim:'dikilen',kk:'kk_gecen',koli:'kolide'};
+    const alanMap={kesim:'kesilen',dikim:'dikilen',kk:'kk_gecen',koli:'kolide',yikama:'yikama_sevk',nakis:'nakis_adet',baski:'baski_adet',utu:'utu_adet',sacak_baglama:'sacak_baglama_adet',sevk:'sevk_adet'};
     const logAlan=alanMap[tip];
     const kullaniciAdi=currentUser?.display_name||currentUser?.username||'—';
     const logPromises=[];
@@ -1208,7 +1342,7 @@ async function girisKaydet(tip){
       const yapilan=logAlan?parseInt(delta[logAlan]||0)||0:0;
       const sipAdet=parseInt(kalem.miktar||0)||0;
       const kalemAdi=[kalem.ad||kalem.kod||'Kalem '+(i+1),kalem.renk,kalem.ebat||kalem.olcu].filter(Boolean).join(' · ');
-      const detayAlanEtiket={kesilen:'Kesilen',fire_kesim:'Fire kesim',dikilen:'Dikilen',fire_dikim:'Fire dikim',kk_gecen:'Kalite geçen',tamir:'Tamir',imha:'İmha',kolide:'Kolide'};
+      const detayAlanEtiket={kesilen:'Kesilen',fire_kesim:'Fire kesim',dikilen:'Dikilen',fire_dikim:'Fire dikim',kk_gecen:'Kalite geçen',tamir:'Tamir',imha:'İmha',kolide:'Kolide',yikama_sevk:'Yıkama sevk',nakis_adet:'Nakış',baski_adet:'Baskı',utu_adet:'Ütü',sacak_baglama_adet:'Saçak bağlama',sevk_adet:'Sevk'};
       const detayList=Object.keys(delta).map(a=>`${detayAlanEtiket[a]||a}: +${delta[a]}`);
       // Sadece değer varsa kaydet
       if(!logAlan||yapilan>0){
