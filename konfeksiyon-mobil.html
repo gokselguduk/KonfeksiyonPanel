@@ -317,6 +317,46 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 let sb=null,currentUser=null,siparisler=[],selectedSiparis=null;
 let kdCache={},girisSeciliId=null,girisKd={},girisKalemler=[],girisTab='kesim';
 let aktifFilter='HEPSI',simteksIds=new Set(),devamdaIds=new Set();
+const UI_STATE_KEY='konf_ui_state';
+function readUiState(){
+  try{return JSON.parse(localStorage.getItem(UI_STATE_KEY)||'{}')||{};}catch{return {};}
+}
+function writeUiState(patch){
+  try{
+    const next={...readUiState(),...patch,updated_at:Date.now()};
+    localStorage.setItem(UI_STATE_KEY,JSON.stringify(next));
+  }catch{}
+}
+function tabToIdx(t){
+  return ({giris:0,siparisler:1,log:2})[t] ?? 0;
+}
+async function restoreUiState(){
+  const st=readUiState();
+  const tab=['giris','siparisler','log'].includes(st?.activeTab)?st.activeTab:'giris';
+
+  const girisAramaEl=document.getElementById('giris-arama');
+  if(girisAramaEl && typeof st?.girisArama==='string')girisAramaEl.value=st.girisArama;
+  girisAramaFiltrele();
+
+  if(st?.girisSiparisId){
+    const hedefId=String(st.girisSiparisId);
+    const sel=document.getElementById('giris-siparis-sel');
+    const varMi=siparisler.some(s=>String(s.id)===hedefId);
+    if(sel && varMi){
+      if(st?.girisAsama)girisAktifAsama=st.girisAsama;
+      sel.value=hedefId;
+      await girisLoadSiparis();
+    }
+  }
+
+  const logSearchEl=document.getElementById('log-search');
+  if(logSearchEl && typeof st?.logSearch==='string'){
+    logSearchEl.value=st.logSearch;
+    logSearchTerm=st.logSearch.toLowerCase().trim();
+  }
+
+  switchTab(tab,tabToIdx(tab));
+}
 /* Arka plan prefetch — sipariş seçilince anında gelsin */
 async function prefetchKdData(){
   const liste=(window._girisListesi||[]).slice(0,10);
@@ -450,7 +490,7 @@ async function doLogin(){
 }
 function normalizeAllowed(r){if(!r)return[];if(Array.isArray(r))return r;try{const j=JSON.parse(r);return Array.isArray(j)?j:[];}catch{return[];}}
 function showLoginErr(m){const el=document.getElementById('login-err');el.textContent=m;el.style.display='block';}
-function doLogout(){localStorage.removeItem('konf_session');currentUser=null;siparisler=[];document.getElementById('app').style.display='none';document.getElementById('topbar').style.display='none';document.getElementById('login-screen').style.display='flex';}
+function doLogout(){localStorage.removeItem('konf_session');localStorage.removeItem(UI_STATE_KEY);currentUser=null;siparisler=[];document.getElementById('app').style.display='none';document.getElementById('topbar').style.display='none';document.getElementById('login-screen').style.display='flex';}
 function tryRestoreSession(){try{const r=localStorage.getItem('konf_session');if(!r)return false;const s=JSON.parse(r);if(!s.user||!s.ts)return false;if(Date.now()-s.ts>8*60*60*1000){localStorage.removeItem('konf_session');return false;}currentUser=s.user;return true;}catch{return false;}}
 
 async function startApp(){
@@ -459,7 +499,7 @@ async function startApp(){
   document.getElementById('app').style.display='block';
   document.getElementById('user-info').textContent=currentUser.display_name||currentUser.username;
   await loadSiparisler();
-  switchTab('giris',0);
+  await restoreUiState();
   setTimeout(()=>prefetchKdData(),600);
 }
 
@@ -615,6 +655,7 @@ function populateSelects(){
 
 function girisAramaFiltrele(){
   const q=(document.getElementById('giris-arama')?.value||'').toLowerCase().trim();
+  writeUiState({girisArama:q});
   const kaynak=window._girisListesi||siparisler;
   let filtrelendi=q?kaynak.filter(s=>
     String(s.sno||'').toLowerCase().includes(q)||
@@ -630,6 +671,7 @@ async function girisLoadSiparis(){
   const area=document.getElementById('giris-form-area');
   if(!id){area.innerHTML=`<div class="empty"><div class="icon">📝</div>Yukarıdan sipariş seçin</div>`;return;}
   girisSeciliId=id;
+  writeUiState({girisSiparisId:String(id)});
   girisKalemler=parseKalemler(siparisler.find(s=>s.id==id)||{});
   /* Cache'te varsa spinner bile gösterme — anında aç */
   if(kdCache['KD_KONFEKSIYON_'+id]!==undefined&&kdCache['KD_URUN_AGACI_'+id]!==undefined){
@@ -694,6 +736,7 @@ function renderGirisAsamaTabs(kdUa){
 
 function girisSecAsama(asama){
   girisAktifAsama=asama;
+  writeUiState({girisAsama:asama});
   const kdUaCache=kdCache['KD_URUN_AGACI_'+girisSeciliId]||{};
   renderGirisAsamaTabs(kdUaCache);
 }
@@ -718,8 +761,19 @@ function renderAsamaIcerik(asama){
   const alan=alanMap[asama]||{yapilan:'adet',fire:null,yapilanLabel:'Yapılan',fireLabel:null};
 
   // Toplamlar
+  const kaliteToplamKalem=kk=>{
+    const gecen=parseInt(kk?.kk_gecen||0)||0;
+    const iki=parseInt(kk?.iki_kalite||0)||0;
+    const tamir=parseInt(kk?.tamir||0)||0;
+    const imha=parseInt(kk?.imha||0)||0;
+    return gecen+iki+tamir+imha;
+  };
   const topSip=kalemler.reduce((a,k)=>a+(parseInt(k.miktar)||0),0);
-  const topYap=kalemler.reduce((a,_,i)=>a+(parseInt(kd['kalem_'+i]?.[alan.yapilan]||0)||0),0);
+  const topYap=kalemler.reduce((a,_,i)=>{
+    const kk=kd['kalem_'+i]||{};
+    if(asama==='kalite') return a+kaliteToplamKalem(kk);
+    return a+(parseInt(kk[alan.yapilan]||0)||0);
+  },0);
   const topKalan=topSip-topYap;
   const pct=topSip>0?Math.min(100,Math.round(topYap/topSip*100)):0;
 
@@ -753,7 +807,9 @@ function renderAsamaIcerik(asama){
     urunHtml+=kalemler.map((k,i)=>{
       const kk=kd['kalem_'+i]||{};
       const sipAdet=parseInt(k.miktar||0)||0;
-      const yapilan=parseInt(kk[alan.yapilan]||0)||0;
+      const yapilan=asama==='kalite'
+        ? kaliteToplamKalem(kk)
+        : (parseInt(kk[alan.yapilan]||0)||0);
       const kalan=Math.max(0,sipAdet-yapilan);
       const pctU=sipAdet>0?Math.min(100,Math.round(yapilan/sipAdet*100)):0;
       const baslik=[k.ad||k.kod||'Kalem '+(i+1),k.ebat||k.olcu,k.renk].filter(Boolean).join(' · ');
@@ -897,6 +953,7 @@ function logSetFilter(f,el){
 
 function logFiltrele(){
   logSearchTerm=(document.getElementById('log-search')?.value||'').toLowerCase().trim();
+  writeUiState({logSearch:logSearchTerm});
   logGosterilen=LOG_SAYFA;
   renderLogFiltreli();
 }
@@ -1113,7 +1170,12 @@ async function girisKaydet(tip){
       tK+=parseInt(ki.kesilen||0)||0;tD+=parseInt(ki.dikilen||0)||0;
       tKK+=parseInt(ki.kk_gecen||0)||0;tKol+=parseInt(ki.kolide||0)||0;
       tH+=(parseInt(ki.iki_kalite||0)||0)+(parseInt(ki.tamir||0)||0)+(parseInt(ki.imha||0)||0);});
-    kd.kesim_toplam=tK;kd.dikim_toplam=tD;kd.kk_gecen=tKK;kd.koli_toplam=tKol;kd.hatali_toplam=tH;
+    kd.kesim_toplam=tK;
+    kd.dikim_toplam=tD;
+    kd.kk_gecen=tKK;
+    kd.kalite_toplam=tKK+tH;
+    kd.koli_toplam=tKol;
+    kd.hatali_toplam=tH;
     await sbKdSet(girisSeciliId,'KD_KONFEKSIYON',kd);
     girisKd={...kd};
 
@@ -1319,7 +1381,9 @@ async function raymeSetDurum(yeniDurum){
 
 function switchTab(t,idx){
   ['giris','siparisler','log'].forEach(id=>{const el=document.getElementById('tab-'+id);if(el)el.style.display=id===t?'':'none';});
-  document.querySelectorAll('#main-tab-bar .tab-btn').forEach((b,i)=>b.classList.toggle('active',i===idx));
+  const activeIdx=typeof idx==='number'?idx:tabToIdx(t);
+  document.querySelectorAll('#main-tab-bar .tab-btn').forEach((b,i)=>b.classList.toggle('active',i===activeIdx));
+  writeUiState({activeTab:t});
   if(t==='log'&&logTumData.length===0)logLoadAll();
 }
 
