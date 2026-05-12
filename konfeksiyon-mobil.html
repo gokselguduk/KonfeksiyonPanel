@@ -187,6 +187,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   .tag{font-size:8px;padding:2px 6px}
   #log-ozet{grid-template-columns:1fr !important}
 }
+
+/* Tablet optimizasyonu (Samsung Galaxy Tab vb.) */
+@media (min-width: 700px){
+  body{max-width:none;margin:0}
+  #topbar{padding:0 20px}
+  .tab-btn{padding:13px 18px;font-size:12px}
+  .content{padding:18px}
+  .login-card{max-width:520px}
+}
 </style>
 </head>
 <body>
@@ -318,6 +327,7 @@ let sb=null,currentUser=null,siparisler=[],selectedSiparis=null;
 let kdCache={},kdCacheTs={},girisSeciliId=null,girisKd={},girisKalemler=[],girisTab='kesim';
 let aktifFilter='HEPSI',simteksIds=new Set(),devamdaIds=new Set();
 let panelSiparisTum=[]; // durumdan bağımsız: log ve eşleştirme için
+let syncBusy=false,syncTimer=null;
 const UI_STATE_KEY='konf_ui_state';
 function readUiState(){
   try{return JSON.parse(localStorage.getItem(UI_STATE_KEY)||'{}')||{};}catch{return {};}
@@ -501,6 +511,7 @@ async function startApp(){
   document.getElementById('user-info').textContent=currentUser.display_name||currentUser.username;
   await loadSiparisler();
   await restoreUiState();
+  startLiveSync();
   setTimeout(()=>prefetchKdData(),600);
 }
 
@@ -1225,8 +1236,8 @@ async function girisKaydet(tip){
 
     const kdUa = await getKd(girisSeciliId,'KD_URUN_AGACI');
     renderGirisAsamaTabs(kdUa);
-    showToast('✅ Kayıt başarılı');
-  }catch(e){showToast('❌ Kayıt başarısız: '+(e.message||e),2800);}
+    showToast('Kayıt yapıldı',1800);
+  }catch(e){showToast('Kayıt başarısız',2200);}
   if(btn){btn.disabled=false;btn.textContent=origBtnText||'💾 KAYDET';}
 }
 
@@ -1400,6 +1411,36 @@ function switchTab(t,idx){
   if(t==='log')logLoadAll();
 }
 
+function aktifTabId(){
+  if(document.getElementById('tab-log')?.style.display!=='none')return 'log';
+  if(document.getElementById('tab-siparisler')?.style.display!=='none')return 'siparisler';
+  return 'giris';
+}
+
+async function refreshCurrentView(){
+  if(syncBusy||!currentUser||!sb)return;
+  syncBusy=true;
+  try{
+    const tab=aktifTabId();
+    if(tab==='log'){
+      await logLoadAll();
+    }else if(tab==='siparisler'){
+      await loadSiparisler();
+    }else if(tab==='giris'&&girisSeciliId){
+      await girisLoadSiparis();
+    }
+  }catch{}
+  syncBusy=false;
+}
+
+function startLiveSync(){
+  if(syncTimer)clearInterval(syncTimer);
+  syncTimer=setInterval(()=>{
+    if(document.hidden)return;
+    refreshCurrentView();
+  },15000);
+}
+
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
 function erpParseExcelNumberExpr(raw){
   const s=String(raw??'').trim();
@@ -1469,12 +1510,15 @@ window.addEventListener('DOMContentLoaded',()=>{
     navigator.serviceWorker.getRegistrations()
       .then(rs=>Promise.all(rs.map(r=>r.unregister())))
       .catch(()=>{})
-      .finally(()=>{
-        navigator.serviceWorker.register('./sw.js?v=20260512').catch(()=>{});
-      });
+      .finally(()=>{});
   }
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshCurrentView();});
+  window.addEventListener('focus',()=>refreshCurrentView());
   if(!initSB())return;
-  if(tryRestoreSession())startApp();
+  if(tryRestoreSession()){
+    startApp();
+    startLiveSync();
+  }
 });
 </script>
 </body>
