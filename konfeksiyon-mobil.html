@@ -900,6 +900,14 @@ function renderAsamaIcerik(asama){
     sevk:{yapilan:'sevk_adet',fire:null,yapilanLabel:'Sevk Edilen',fireLabel:null},
   };
   const alan=alanMap[asama]||{yapilan:'adet',fire:null,yapilanLabel:'Yapılan',fireLabel:null};
+  const getDokumaAdet=kk=>{
+    const adaylar=[kk?.dokuma_adet,kk?.dokuma,kk?.dokunan,kk?.dokuma_miktar,kk?.weaving_qty];
+    for(const v of adaylar){
+      const n=parseInt(v||0)||0;
+      if(n>0) return n;
+    }
+    return 0;
+  };
 
   // Toplamlar
   const kaliteToplamKalem=kk=>{
@@ -954,6 +962,7 @@ function renderAsamaIcerik(asama){
       const kalan=Math.max(0,sipAdet-yapilan);
       const pctU=sipAdet>0?Math.min(100,Math.round(yapilan/sipAdet*100)):0;
       const baslik=[k.ad||k.kod||'Kalem '+(i+1),k.ebat||k.olcu,k.renk].filter(Boolean).join(' · ');
+      const dokumaAdet=getDokumaAdet(kk);
 
       // Kalite için ekstra satırlar (2. kalite, tamir, imha)
       let extraRows='';
@@ -991,6 +1000,7 @@ function renderAsamaIcerik(asama){
 
       return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:6px">
         <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:6px;line-height:1.4">${esc(baslik)}</div>
+        ${asama==='kesim' ? `<div style="font-size:10px;color:var(--cyan);margin:-2px 0 8px 0">Dokuma: <b>${dokumaAdet||0}</b> adet</div>` : ''}
         <div style="display:grid;grid-template-columns:1fr 80px 64px 64px;gap:6px;align-items:center">
           <div>
             <div class="bar-track"><div class="bar-fill" style="width:${pctU}%;background:${m.color}"></div></div>
