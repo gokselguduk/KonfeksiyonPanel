@@ -223,13 +223,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="tab-bar" id="main-tab-bar">
     <button class="tab-btn active" onclick="switchTab('giris',0)">✏️ Veri Girişi</button>
     <button class="tab-btn" onclick="switchTab('siparisler',1)">📋 Siparişler</button>
-    <button class="tab-btn" onclick="switchTab('log',2)">📋 İş Akışı</button>
-    <button class="tab-btn" onclick="switchTab('rayme',3)">🌟 Rayme Talepleri</button>
+    <button class="tab-btn" onclick="switchTab('log',2)">📋 Değişiklik Geçmişi</button>
   </div>
 
   <div id="tab-giris" class="content">
     <div class="sel-card">
       <div class="sec-title" style="margin-bottom:7px">Sipariş Seç</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.4">
+        Bu panel yalnızca Simteks içi konfeksiyon aşaması veri girişleri içindir.
+        Fason ve doğrudan sevk siparişleri bu listede gösterilmez.
+      </div>
       <input id="giris-arama" class="field-input" placeholder="🔍 Sipariş no veya müşteri ara…" oninput="girisAramaFiltrele()" style="margin-bottom:8px;font-size:13px">
       <select class="field-select" id="giris-siparis-sel" onchange="girisLoadSiparis()" style="margin-bottom:0">
         <option value="">— Sipariş seçin —</option>
@@ -248,7 +251,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 
   <div id="tab-log" class="content" style="display:none">
-    <input id="log-search" class="field-input" placeholder="🔍 Sipariş no, firma, ürün, işlem ara…" oninput="logFiltrele()" style="margin-bottom:8px;font-size:13px">
+    <input id="log-search" class="field-input" placeholder="🔍 Sipariş no, firma, ürün, işlem veya kullanıcı ara…" oninput="logFiltrele()" style="margin-bottom:8px;font-size:13px">
     <div class="filter-row" id="log-filter-row">
       <button class="filter-chip active" onclick="logSetFilter('HEPSI',this)">Tümü</button>
       <button class="filter-chip" onclick="logSetFilter('kesim',this)">✂️ Kesim</button>
@@ -341,12 +344,84 @@ function normText(v){
     .trim();
 }
 function siparisUretimYeri(s){
-  return normText(s?.uretim_yeri || s?.siparis_uretim_yeri || '');
+  return normText(
+    s?.konfeksiyon_yeri ||
+    s?.siparis_konfeksiyon_yeri ||
+    s?.konfeksiyon_uretim_yeri ||
+    s?.uretim_yeri ||
+    s?.siparis_uretim_yeri ||
+    s?.uretim_yeri_ad ||
+    s?.uretim_yeri_adi ||
+    s?.uretim_yeri_text ||
+    ''
+  );
 }
 function isSimteksSiparis(s){
-  const y=siparisUretimYeri(s);
-  if(!y) return true; // legacy kayitlar gorunmeye devam etsin
-  return y.includes('simteks') || y.includes('simteks konf') || y.includes('simteks konfeksiyon') || y.includes('simteks konfeksiyon uretim');
+  const alanlar=[
+    s?.konfeksiyon_yeri,
+    s?.siparis_konfeksiyon_yeri,
+    s?.konfeksiyon_uretim_yeri,
+    s?.konfeksiyon,
+    s?.konfeksiyon_tipi,
+    s?.uretim_yeri,
+    s?.siparis_uretim_yeri,
+    s?.uretim_yeri_ad,
+    s?.uretim_yeri_adi,
+    s?.uretim_yeri_text
+  ].map(normText).filter(Boolean);
+  if(!alanlar.length) return false; // belirsizse gösterme
+  const txt=alanlar.join(' ');
+  const simteksKonf=
+    txt.includes('simteks konfeksiyon') ||
+    txt.includes('simteks konf') ||
+    (txt.includes('simteks') && txt.includes('konfeksiyon')) ||
+    txt === 'simteks';
+  return simteksKonf;
+}
+function isKonfeksiyonDisiSiparis(s){
+  const fasonFlag=String(
+    s?.is_fason ?? s?.fason_mu ?? s?.fason_siparis ?? s?.fason_flag ?? ''
+  ).toLowerCase();
+  const direktSevkFlag=String(
+    s?.is_dogrudan_sevk ?? s?.dogrudan_sevk ?? s?.direkt_sevk ?? s?.direct_ship ?? ''
+  ).toLowerCase();
+  if(['true','1','evet','yes'].includes(fasonFlag)) return true;
+  if(['true','1','evet','yes'].includes(direktSevkFlag)) return true;
+
+  const alanlar=[
+    s?.konfeksiyon_yeri,
+    s?.siparis_konfeksiyon_yeri,
+    s?.konfeksiyon_uretim_yeri,
+    s?.konfeksiyon,
+    s?.konfeksiyon_tipi,
+    s?.siparis_tipi,
+    s?.siparis_turu,
+    s?.uretim_tipi,
+    s?.uretim_modeli,
+    s?.sevk_tipi,
+    s?.gonderim_tipi,
+    s?.teslimat_tipi,
+    s?.fason_durum,
+    s?.fason,
+    s?.aciklama,
+    s?.notlar
+  ].map(normText).filter(Boolean);
+  if(!alanlar.length) return false;
+  const txt=alanlar.join(' ');
+  const fasonDisi=txt.includes('fason');
+  const direktSevkDisi=
+    (txt.includes('dogrudan') || txt.includes('direkt') || txt.includes('direct')) &&
+    txt.includes('sevk');
+  const disariDisi=
+    txt.includes('disari') ||
+    txt.includes('disa') ||
+    txt.includes('harici') ||
+    txt.includes('atolye') ||
+    txt.includes('subcontract');
+  return fasonDisi || direktSevkDisi || disariDisi;
+}
+function isKonfeksiyonPanelSiparisi(s){
+  return isSimteksSiparis(s) && !isKonfeksiyonDisiSiparis(s);
 }
 
 async function doLogin(){
@@ -398,9 +473,9 @@ async function loadSiparisler(){
     ]);
     if(sipRes.error)throw sipRes.error;
     const tumSiparisler=(sipRes.data||[]).filter(s=>!gizli.includes(String(s.durum||'').toUpperCase().trim()));
-    siparisler=tumSiparisler;
-    simteksIds=new Set(siparisler.filter(isSimteksSiparis).map(s=>String(s.id)));
-    window._girisListesi=siparisler.filter(isSimteksSiparis);
+    siparisler=tumSiparisler.filter(isKonfeksiyonPanelSiparisi);
+    simteksIds=new Set(siparisler.map(s=>String(s.id)));
+    window._girisListesi=[...siparisler];
     devamdaIds=new Set();
     (akisRes.data||[]).forEach(r=>devamdaIds.add(String(r.siparis_id)));
     renderSiparisler();
@@ -593,7 +668,8 @@ function getAsamalar(kdUa,kalemler){
     (ua.asamalar||ua.teknik_genel?.asamalar||[]).forEach(a=>set.add(a));
   });
   if(set.size===0)['kesim','dikim','kalite','koli'].forEach(a=>set.add(a));
-  return['dokuma','kesim','yikama','dikim','nakis','baskı','ütü','kalite','koli','sevk'].filter(a=>set.has(a));
+  const panelAsamalari=['kesim','yikama','dikim','nakis','baskı','ütü','kalite','koli'];
+  return panelAsamalari.filter(a=>set.has(a));
 }
 
 function renderGirisAsamaTabs(kdUa){
@@ -804,7 +880,8 @@ async function logLoadAll(){
       .order('created_at',{ascending:false})
       .limit(500);
     if(error)throw error;
-    logTumData=data||[];
+    const panelSiparisIdSet=new Set(siparisler.map(s=>String(s.id)));
+    logTumData=(data||[]).filter(r=>panelSiparisIdSet.has(String(r.siparis_id)));
     logGosterilen=LOG_SAYFA;
     renderLogFiltreli();
   }catch(e){area.innerHTML=`<div class="empty"><div class="icon">⚠️</div>Hata: ${e.message}</div>`;}
@@ -1241,10 +1318,9 @@ async function raymeSetDurum(yeniDurum){
 
 
 function switchTab(t,idx){
-  ['giris','siparisler','log','rayme'].forEach(id=>{const el=document.getElementById('tab-'+id);if(el)el.style.display=id===t?'':'none';});
+  ['giris','siparisler','log'].forEach(id=>{const el=document.getElementById('tab-'+id);if(el)el.style.display=id===t?'':'none';});
   document.querySelectorAll('#main-tab-bar .tab-btn').forEach((b,i)=>b.classList.toggle('active',i===idx));
   if(t==='log'&&logTumData.length===0)logLoadAll();
-  if(t==='rayme')loadRaymeTalepleri();
 }
 
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
