@@ -333,7 +333,6 @@ async function restoreUiState(){
     const sel=document.getElementById('giris-siparis-sel');
     const varMi=siparisler.some(s=>String(s.id)===hedefId);
     if(sel && varMi){
-      girisAktifAsama=null;
       sel.value=hedefId;
       await girisLoadSiparis();
     }
@@ -744,6 +743,8 @@ function populateSelects(){
 }
 
 function girisAramaFiltrele(){
+  const sel=document.getElementById('giris-siparis-sel');
+  const oncekiVal=sel?.value||'';
   const q=(document.getElementById('giris-arama')?.value||'').toLowerCase().trim();
   writeUiState({girisArama:q});
   const kaynak=window._girisListesi||siparisler;
@@ -753,30 +754,49 @@ function girisAramaFiltrele(){
   ):[...kaynak];
   const opts=filtrelendi.map(s=>`<option value="${s.id}">${esc(s.sno||'—')} · ${esc(s.firma||'')}</option>`).join('');
   const pre='<option value="">— Sipariş seçin —</option>';
-  document.getElementById('giris-siparis-sel').innerHTML=pre+opts;
+  if(sel)sel.innerHTML=pre+opts;
+  if(sel&&oncekiVal&&filtrelendi.some(s=>String(s.id)===String(oncekiVal)))sel.value=oncekiVal;
 }
 
 async function girisLoadSiparis(){
   const id=document.getElementById('giris-siparis-sel').value;
   const area=document.getElementById('giris-form-area');
-  if(!id){area.innerHTML=`<div class="empty"><div class="icon">📝</div>Yukarıdan sipariş seçin</div>`;return;}
+  if(!id){
+    girisSeciliId=null;
+    girisAktifAsama=null;
+    area.innerHTML=`<div class="empty"><div class="icon">📝</div>Yukarıdan sipariş seçin</div>`;
+    return;
+  }
+  const stOnce=readUiState();
+  const oncekiSiparisId=girisSeciliId;
+  const siparisDegisti=String(oncekiSiparisId||'')!==String(id);
+  if(siparisDegisti)girisAktifAsama=null;
   girisSeciliId=id;
-  girisAktifAsama=null;
   writeUiState({girisSiparisId:String(id)});
   girisKalemler=parseKalemler(siparisler.find(s=>s.id==id)||{});
+  const kayitliAsamaGecerli=(kdUa)=>{
+    if(!siparisDegisti)return;
+    const ga=stOnce.girisAsama;
+    const gs=stOnce.girisSiparisId;
+    if(!ga||String(gs||'')!==String(id))return;
+    const asamalar=getAsamalar(kdUa,girisKalemler);
+    if(asamalar.includes(ga))girisAktifAsama=ga;
+  };
   /* Multi-device uyumu: sipariş açılışında güncel veriyi zorla çek */
   if(kdCache['KD_KONFEKSIYON_'+id]!==undefined&&kdCache['KD_URUN_AGACI_'+id]!==undefined){
     const[kd,kdUa]=await Promise.all([getKd(id,'KD_KONFEKSIYON',true),getKd(id,'KD_URUN_AGACI',true)]);
     girisKd={...kd};
-    if(!girisAktifAsama){girisAktifAsama=null;}
+    kayitliAsamaGecerli(kdUa);
     renderGirisAsamaTabs(kdUa);
+    writeUiState({girisAsama:girisAktifAsama||null});
     return;
   }
   area.innerHTML='<div class="loading"><div class="spinner"></div><div style="margin-top:10px;font-size:12px;color:var(--text2)">Siparişler yükleniyor…</div></div>';
   const[kd,kdUa]=await Promise.all([getKd(id,'KD_KONFEKSIYON',true),getKd(id,'KD_URUN_AGACI',true)]);
   girisKd={...kd};
-  if(!girisAktifAsama){girisAktifAsama=null;}
+  kayitliAsamaGecerli(kdUa);
   renderGirisAsamaTabs(kdUa);
+  writeUiState({girisAsama:girisAktifAsama||null});
 }
 
 const UA_ASAMALAR_MAP={
