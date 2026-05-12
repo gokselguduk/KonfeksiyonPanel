@@ -244,7 +244,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         Bu panel yalnızca Simteks içi konfeksiyon aşaması veri girişleri içindir.
         Fason ve doğrudan sevk siparişleri bu listede gösterilmez.
       </div>
-      <input id="giris-arama" class="field-input" placeholder="🔍 Sipariş no veya müşteri ara…" oninput="girisAramaFiltrele()" style="margin-bottom:8px;font-size:13px">
+      <input id="giris-arama" class="field-input" placeholder="🔍 Sipariş no, müşteri veya ürün / kalem ara…" oninput="girisAramaFiltrele()" style="margin-bottom:8px;font-size:13px">
       <select class="field-select" id="giris-siparis-sel" onchange="girisLoadSiparis()" style="margin-bottom:0">
         <option value="">— Sipariş seçin —</option>
       </select>
@@ -565,10 +565,16 @@ function renderSiparisler(){
   document.getElementById('siparis-liste-card').innerHTML=html;
 }
 
+function siparisKalemOzeti(s){
+  const k=parseKalemler(s);
+  if(!k.length)return '—';
+  return k.slice(0,2).map(x=>x.ad||x.kod||'').filter(Boolean).join(', ')+(k.length>2?` +${k.length-2}`:'');
+}
+
 function sipItem(s){
   const k=parseKalemler(s);
   const adet=parseInt(s.miktar)||k.reduce((a,x)=>a+(parseInt(x.miktar)||0),0);
-  const ozet=k.length?k.slice(0,2).map(x=>x.ad||x.kod||'').filter(Boolean).join(', ')+(k.length>2?` +${k.length-2}`:''):'—';
+  const ozet=siparisKalemOzeti(s);
   const sTg='';
   return `<div class="siparis-item" onclick="openSiparis(${JSON.stringify(s.id)})">
     <div class="siparis-dot" style="background:${dColor(s.durum)}"></div>
@@ -750,11 +756,17 @@ function girisAramaFiltrele(){
   const q=(document.getElementById('giris-arama')?.value||'').toLowerCase().trim();
   writeUiState({girisArama:q});
   const kaynak=window._girisListesi||siparisler;
-  let filtrelendi=q?kaynak.filter(s=>
-    String(s.sno||'').toLowerCase().includes(q)||
-    String(s.firma||'').toLowerCase().includes(q)
-  ):[...kaynak];
-  const opts=filtrelendi.map(s=>`<option value="${s.id}">${esc(s.sno||'—')} · ${esc(s.firma||'')}</option>`).join('');
+  const siparisAramaBlob=s=>{
+    const k=parseKalemler(s);
+    const parca=k.flatMap(x=>[x.ad,x.kod,x.renk,x.ebat,x.olcu]);
+    return normText([s.sno,s.firma,siparisKalemOzeti(s),...parca].join(' '));
+  };
+  let filtrelendi=q?kaynak.filter(s=>siparisAramaBlob(s).includes(normText(q))):[...kaynak];
+  const opts=filtrelendi.map(s=>{
+    const oz=siparisKalemOzeti(s);
+    const satir=`${esc(s.sno||'—')} · ${esc(s.firma||'')}`+(oz&&oz!=='—'?` · ${esc(oz)}`:'');
+    return `<option value="${s.id}">${satir}</option>`;
+  }).join('');
   const pre='<option value="">— Sipariş seçin —</option>';
   if(sel)sel.innerHTML=pre+opts;
   if(sel&&oncekiVal&&filtrelendi.some(s=>String(s.id)===String(oncekiVal)))sel.value=oncekiVal;
