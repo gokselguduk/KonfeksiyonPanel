@@ -584,7 +584,7 @@ function sipItem(s){
   const adet=parseInt(s.miktar)||k.reduce((a,x)=>a+(parseInt(x.miktar)||0),0);
   const ozet=k.length?k.slice(0,2).map(x=>x.ad||x.kod||'').filter(Boolean).join(', ')+(k.length>2?` +${k.length-2}`:''):'—';
   const sTg='';
-  return `<div class="siparis-item" onclick="girisSiparisAc(${s.id})">
+  return `<div class="siparis-item" onclick="openSiparis(${s.id})">
     <div class="siparis-dot" style="background:${dColor(s.durum)}"></div>
     <div class="siparis-info">
       <div class="siparis-no">${esc(s.sno||'—')}</div>
