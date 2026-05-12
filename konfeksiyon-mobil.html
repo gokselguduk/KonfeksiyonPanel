@@ -620,13 +620,13 @@ async function renderModalTab(t){
   }
   if(t==='kalemler'){
     body.innerHTML='<div class="loading"><div class="spinner"></div></div>';
-    const kd=await getKd(s.id,'KD_KONFEKSIYON');const ks=parseKalemler(s);
+    const kd=await getKd(s.id,'KD_KONFEKSIYON',true);const ks=parseKalemler(s);
     if(!ks.length){body.innerHTML=`<div class="empty"><div class="icon">📦</div>Kalem bulunamadı</div>`;return;}
     body.innerHTML=ks.map((k,i)=>{const kk=kd[`kalem_${i}`]||{};const sa=parseInt(k.miktar||0)||0;const kes=parseInt(kk.kesilen||0)||0,dik=parseInt(kk.dikilen||0)||0,kkG=parseInt(kk.kk_gecen||0)||0,kol=parseInt(kk.kolide||0)||0;const baslik=[k.ad||k.kod||"Kalem "+(i+1),k.ebat||k.olcu,k.renk].filter(Boolean).join("  ·  ");return `<div class="kalem-girdi"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px"><div style="font-size:13px;font-weight:700;line-height:1.5;flex:1">${esc(baslik)}</div><div style="text-align:right;flex-shrink:0"><div style="font-size:20px;font-weight:800;color:var(--accent2);line-height:1">${sa}</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">adet</div></div></div>${bRow("KESİM",kes,sa,"#6366f1")}${bRow("DİKİM",dik,sa,"#ec4899")}${bRow("KK",kkG,sa,"#f59e0b")}${bRow("KOLİ",kol,sa,"#10b981")}</div>`;}).join("");return;
   }
   if(t==='konfeksiyon'){
     body.innerHTML='<div class="loading"><div class="spinner"></div></div>';
-    const kd=await getKd(s.id,'KD_KONFEKSIYON');const ks=parseKalemler(s);
+    const kd=await getKd(s.id,'KD_KONFEKSIYON',true);const ks=parseKalemler(s);
     const sa=parseInt(s.miktar)||ks.reduce((a,k)=>a+(parseInt(k.miktar)||0),0);
     const kes=parseInt(kd.kesim_toplam||0)||0,dik=parseInt(kd.dikim_toplam||0)||0,kk=parseInt(kd.kk_gecen||0)||0,kol=parseInt(kd.koli_toplam||0)||0,hat=parseInt(kd.hatali_toplam||0)||0;
     const p=v=>sa>0?Math.min(100,Math.round(v/sa*100)):0;
@@ -1394,7 +1394,10 @@ function switchTab(t,idx){
   const activeIdx=typeof idx==='number'?idx:tabToIdx(t);
   document.querySelectorAll('#main-tab-bar .tab-btn').forEach((b,i)=>b.classList.toggle('active',i===activeIdx));
   writeUiState({activeTab:t});
-  if(t==='log'&&logTumData.length===0)logLoadAll();
+  if(t==='giris' && girisSeciliId){
+    setTimeout(()=>{girisLoadSiparis().catch(()=>{});},0);
+  }
+  if(t==='log')logLoadAll();
 }
 
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
@@ -1463,7 +1466,12 @@ document.addEventListener('focusout',(e)=>{
 
 window.addEventListener('DOMContentLoaded',()=>{
   if('serviceWorker' in navigator){
-    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    navigator.serviceWorker.getRegistrations()
+      .then(rs=>Promise.all(rs.map(r=>r.unregister())))
+      .catch(()=>{})
+      .finally(()=>{
+        navigator.serviceWorker.register('./sw.js?v=20260512').catch(()=>{});
+      });
   }
   if(!initSB())return;
   if(tryRestoreSession())startApp();
