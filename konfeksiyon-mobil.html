@@ -315,8 +315,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <script>
 let sb=null,currentUser=null,siparisler=[],selectedSiparis=null;
-let kdCache={},girisSeciliId=null,girisKd={},girisKalemler=[],girisTab='kesim';
+let kdCache={},kdCacheTs={},girisSeciliId=null,girisKd={},girisKalemler=[],girisTab='kesim';
 let aktifFilter='HEPSI',simteksIds=new Set(),devamdaIds=new Set();
+let panelSiparisTum=[]; // durumdan bağımsız: log ve eşleştirme için
 const UI_STATE_KEY='konf_ui_state';
 function readUiState(){
   try{return JSON.parse(localStorage.getItem(UI_STATE_KEY)||'{}')||{};}catch{return {};}
@@ -512,8 +513,9 @@ async function loadSiparisler(){
       sb.from('siparis_akis').select('siparis_id').eq('islem','KD_KONFEKSIYON')
     ]);
     if(sipRes.error)throw sipRes.error;
-    const tumSiparisler=(sipRes.data||[]).filter(s=>!gizli.includes(String(s.durum||'').toUpperCase().trim()));
-    siparisler=tumSiparisler.filter(isKonfeksiyonPanelSiparisi);
+    const tumSiparisler=(sipRes.data||[]);
+    panelSiparisTum=tumSiparisler.filter(isKonfeksiyonPanelSiparisi);
+    siparisler=panelSiparisTum.filter(s=>!gizli.includes(String(s.durum||'').toUpperCase().trim()));
     simteksIds=new Set(siparisler.map(s=>String(s.id)));
     window._girisListesi=[...siparisler];
     devamdaIds=new Set();
@@ -673,16 +675,16 @@ async function girisLoadSiparis(){
   girisSeciliId=id;
   writeUiState({girisSiparisId:String(id)});
   girisKalemler=parseKalemler(siparisler.find(s=>s.id==id)||{});
-  /* Cache'te varsa spinner bile gösterme — anında aç */
+  /* Multi-device uyumu: sipariş açılışında güncel veriyi zorla çek */
   if(kdCache['KD_KONFEKSIYON_'+id]!==undefined&&kdCache['KD_URUN_AGACI_'+id]!==undefined){
-    const[kd,kdUa]=await Promise.all([getKd(id,'KD_KONFEKSIYON'),getKd(id,'KD_URUN_AGACI')]);
+    const[kd,kdUa]=await Promise.all([getKd(id,'KD_KONFEKSIYON',true),getKd(id,'KD_URUN_AGACI',true)]);
     girisKd={...kd};
     if(!girisAktifAsama){girisAktifAsama=null;}
     renderGirisAsamaTabs(kdUa);
     return;
   }
   area.innerHTML='<div class="loading"><div class="spinner"></div><div style="margin-top:10px;font-size:12px;color:var(--text2)">Siparişler yükleniyor…</div></div>';
-  const[kd,kdUa]=await Promise.all([getKd(id,'KD_KONFEKSIYON'),getKd(id,'KD_URUN_AGACI')]);
+  const[kd,kdUa]=await Promise.all([getKd(id,'KD_KONFEKSIYON',true),getKd(id,'KD_URUN_AGACI',true)]);
   girisKd={...kd};
   if(!girisAktifAsama){girisAktifAsama=null;}
   renderGirisAsamaTabs(kdUa);
@@ -930,13 +932,15 @@ async function logLoadAll(){
   const area=document.getElementById('log-area');
   area.innerHTML='<div class="loading"><div class="spinner"></div></div>';
   try{
+    const sinceIso=new Date(Date.now()-45*24*60*60*1000).toISOString();
     const{data,error}=await sb.from('siparis_akis')
       .select('id,siparis_id,islem,kalem_ad,miktar,notlar,created_at')
       .not('islem','in','("KD_KONFEKSIYON","KD_DOKUMA","KD_URUN_AGACI")')
+      .gte('created_at',sinceIso)
       .order('created_at',{ascending:false})
-      .limit(500);
+      .limit(2000);
     if(error)throw error;
-    const panelSiparisIdSet=new Set(siparisler.map(s=>String(s.id)));
+    const panelSiparisIdSet=new Set(panelSiparisTum.map(s=>String(s.id)));
     logTumData=(data||[]).filter(r=>panelSiparisIdSet.has(String(r.siparis_id)));
     logGosterilen=LOG_SAYFA;
     renderLogFiltreli();
@@ -971,7 +975,7 @@ function logFiltreUygula(){
   }
   if(logSearchTerm){
     data=data.filter(r=>{
-      const sip=siparisler.find(s=>String(s.id)===String(r.siparis_id));
+      const sip=(panelSiparisTum.length?panelSiparisTum:siparisler).find(s=>String(s.id)===String(r.siparis_id));
       return String(sip?.sno||'').toLowerCase().includes(logSearchTerm)||
              String(sip?.firma||'').toLowerCase().includes(logSearchTerm)||
              String(r.siparis_id||'').includes(logSearchTerm)||
@@ -1003,7 +1007,7 @@ function renderLogFiltreli(){
 
   let html='';
   gosterilecek.forEach(r=>{
-    const sip=siparisler.find(s=>String(s.id)===String(r.siparis_id));
+    const sip=(panelSiparisTum.length?panelSiparisTum:siparisler).find(s=>String(s.id)===String(r.siparis_id));
     const sno=sip?.sno||('#'+r.siparis_id)||'—';
     const firma=sip?.firma||'';
     const meta=logIslemMeta(r.islem);
@@ -1127,7 +1131,9 @@ async function girisKaydet(tip){
   const origBtnText=btn?btn.textContent:'💾 KAYDET';
   if(btn){btn.disabled=true;btn.textContent='Kaydediliyor…';}
   try{
-    const kd=girisKd,k=girisKalemler;
+    // Çakışmayı azaltmak için kaydetmeden hemen önce en güncel KD'yi al.
+    const kd=await getKd(girisSeciliId,'KD_KONFEKSIYON',true);
+    const k=girisKalemler;
     const gv=id=>{const el=document.getElementById(id);return el?el.value:'';};
     const gi=id=>erpParseExcelNumberExpr(gv(id)||0);
     const gc=id=>{const el=document.getElementById(id);return el?el.checked:false;};
@@ -1237,12 +1243,15 @@ function ikiKaliteEkle(i){
   showToast('✅ 2. Kalite eklendi: '+sebep+' +'+adet);
 }
 
-async function getKd(id,tip){
-  const key=tip+'_'+id;if(kdCache[key]!==undefined)return kdCache[key];
+async function getKd(id,tip,forceFresh=false){
+  const key=tip+'_'+id;
+  const now=Date.now();
+  const ttlMs=15000;
+  if(!forceFresh && kdCache[key]!==undefined && (now-(kdCacheTs[key]||0))<ttlMs)return kdCache[key];
   try{const{data,error}=await sb.from('siparis_akis').select('id,kalem_ad,notlar,created_at').eq('siparis_id',id).eq('islem',tip).order('created_at',{ascending:false}).limit(20);
   if(error)throw error;
   const c=(data||[]).filter(r=>!r.kalem_ad||String(r.kalem_ad)===String(tip)).map(r=>{try{return JSON.parse(r.notlar||'{}');}catch{return null;}}).filter(Boolean);
-  const v=c[0]||{};kdCache[key]=v;return v;}catch{return{};}
+  const v=c[0]||{};kdCache[key]=v;kdCacheTs[key]=Date.now();return v;}catch{return{};}
 }
 
 async function sbKdSet(id,tip,kd){
@@ -1251,6 +1260,7 @@ async function sbKdSet(id,tip,kd){
   if(ex&&ex.length>0){const{error}=await sb.from('siparis_akis').update({notlar:json,miktar:0}).eq('siparis_id',id).eq('islem',tip).eq('kalem_ad',tip);if(error)throw error;}
   else{const{error}=await sb.from('siparis_akis').insert([{siparis_id:id,islem:tip,kalem_ad:tip,miktar:0,notlar:json}]);if(error)throw error;}
   kdCache[tip+'_'+id]=kd;
+  kdCacheTs[tip+'_'+id]=Date.now();
 }
 
 // ═══════════════════════════════════════
