@@ -6,6 +6,10 @@
   'use strict';
 
   let _konfGlobalKumasGelisCache = [];
+  let _aramaQ = '';
+  let _kumasGelisLoadedAt = 0;
+  let _kumasGelisInflight = null;
+  const KUMAS_CACHE_TTL_MS = 25000;
 
   function userName() {
     const u = global.currentUser;
@@ -174,30 +178,89 @@
     return Math.max(0, hazir - sevk) > 0;
   }
 
+  function rowBlob(r) {
+    return [
+      r.siparis_sno, r.firma, r.kumas_cinsi, r.stok_kodu, r.renk, r.durum,
+      r.sonraki_rota, r.siparis_id,
+      r.created_at ? new Date(r.created_at).toLocaleDateString('tr-TR') : ''
+    ].join(' ').toLocaleLowerCase('tr-TR');
+  }
+
+  function aramaEslesir(r) {
+    const q = String(_aramaQ || '').trim().toLocaleLowerCase('tr-TR');
+    if (!q) return true;
+    const tokens = q.split(/\s+/).filter(Boolean);
+    if (!tokens.length) return true;
+    const blob = rowBlob(r);
+    return tokens.every(t => blob.includes(t));
+  }
+
   function filterRows(rows, filtreId) {
     let out = rows || [];
     const allowed = simteksIdSet();
     if (allowed.size) out = out.filter(r => allowed.has(String(r.siparis_id)));
     if (filtreId) out = out.filter(r => String(r.siparis_id) === String(filtreId));
+    if (_aramaQ) out = out.filter(aramaEslesir);
     return out;
   }
 
-  async function loadKumasGelis() {
+  function setArama(q) {
+    _aramaQ = String(q || '').trim();
+    const asama = global.girisAktifAsama;
+    if (!asama) return;
+    const area = document.getElementById('giris-form-area');
+    if (!area) return;
+    const filtre = filtreSiparisId();
+    try {
+      if (asama === 'kesim') area.innerHTML = renderKesim(filtre);
+      else if (asama === 'yikama') area.innerHTML = renderYikama(filtre);
+      else if (asama === 'kalite') area.innerHTML = renderKalite(filtre);
+      else if (asama === 'sevk') area.innerHTML = renderSevk(filtre);
+    } catch (e) {
+      yenile();
+    }
+  }
+
+  async function loadKumasGelis(force) {
     const client = sb();
     if (!client) { _konfGlobalKumasGelisCache = []; return; }
-    try {
-      const { data, error } = await client.from('siparis_akis')
-        .select('id,created_at,siparis_id,islem,kalem_ad,miktar,notlar')
-        .eq('islem', 'KUMAS_GELIS')
-        .order('created_at', { ascending: false })
-        .limit(800);
-      if (error) { _konfGlobalKumasGelisCache = []; return; }
-      _konfGlobalKumasGelisCache = (data || []).map(satirFromRaw);
-      const ids = [...new Set(_konfGlobalKumasGelisCache.map(r => r.siparis_id).filter(Boolean))].slice(0, 40);
-      await Promise.all(ids.map(sid => getKd(sid, 'KD_URUN_AGACI', false).catch(() => null)));
-    } catch (e) {
-      _konfGlobalKumasGelisCache = [];
+    const now = Date.now();
+    if (!force && _konfGlobalKumasGelisCache.length && (now - _kumasGelisLoadedAt) < KUMAS_CACHE_TTL_MS) {
+      return;
     }
+    if (_kumasGelisInflight) return _kumasGelisInflight;
+    _kumasGelisInflight = (async () => {
+      try {
+        const { data, error } = await client.from('siparis_akis')
+          .select('id,created_at,siparis_id,islem,kalem_ad,miktar,notlar')
+          .eq('islem', 'KUMAS_GELIS')
+          .order('created_at', { ascending: false })
+          .limit(400);
+        if (error) { _konfGlobalKumasGelisCache = []; return; }
+        _konfGlobalKumasGelisCache = (data || []).map(satirFromRaw);
+        _kumasGelisLoadedAt = Date.now();
+        /* Ürün ağacı: sadece aktif/filtrelenen siparişler — 40 paralel sorgu yok */
+        const filtre = filtreSiparisId();
+        let ids = [];
+        if (filtre) {
+          ids = [filtre];
+        } else {
+          const aktif = _konfGlobalKumasGelisCache.filter(r =>
+            kesimAktifMi(r) || yikamaRotaMu(r) || sevkAktifMi(r) || (kaliteOzet(r).bekleyen > 0)
+          );
+          ids = [...new Set(aktif.map(r => r.siparis_id).filter(Boolean))].slice(0, 12);
+        }
+        const missing = ids.filter(sid => !(global.kdCache || {})['KD_URUN_AGACI_' + sid]);
+        if (missing.length) {
+          await Promise.all(missing.map(sid => getKd(sid, 'KD_URUN_AGACI', false).catch(() => null)));
+        }
+      } catch (e) {
+        _konfGlobalKumasGelisCache = [];
+      } finally {
+        _kumasGelisInflight = null;
+      }
+    })();
+    return _kumasGelisInflight;
   }
 
   async function kayitGuncelle(akisId, patch) {
@@ -278,7 +341,7 @@
         <div style="width:7px;height:7px;border-radius:50%;background:${color}"></div>
         <div style="font-size:11px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;flex:1">${title}</div>
         <div style="font-size:10px;color:var(--text3)">${count}</div>
-        <button type="button" onclick="KonfPipeline.yenile()" style="background:none;border:1px solid var(--border2);border-radius:8px;color:var(--text3);padding:4px 8px;font-size:10px;cursor:pointer">↻</button>
+        <button type="button" onclick="KonfPipeline.yenile(true)" style="background:none;border:1px solid var(--border2);border-radius:8px;color:var(--text3);padding:4px 8px;font-size:10px;cursor:pointer">↻</button>
       </div>
       <div style="padding:10px 12px">${body}</div>
     </div>`;
@@ -416,7 +479,7 @@
 
   async function renderAsama(asama) {
     const filtre = filtreSiparisId();
-    await loadKumasGelis();
+    await loadKumasGelis(false);
     if (asama === 'kesim') return renderKesim(filtre);
     if (asama === 'yikama') return renderYikama(filtre);
     if (asama === 'kalite') return renderKalite(filtre);
@@ -424,13 +487,29 @@
     return emptyBox('Alan seçin');
   }
 
-  async function yenile() {
+  async function yenile(forceReload) {
     const area = document.getElementById('giris-form-area');
     if (!area) return;
     const asama = global.girisAktifAsama;
     if (!asama) return;
-    area.innerHTML = '<div class="loading"><div class="spinner"></div><div style="margin-top:8px;font-size:12px;color:var(--text2)">Pipeline yükleniyor…</div></div>';
+    const aramaEl = document.getElementById('giris-arama');
+    if (aramaEl) _aramaQ = String(aramaEl.value || '').trim();
+    const hasCache = _konfGlobalKumasGelisCache.length > 0
+      && (Date.now() - _kumasGelisLoadedAt) < KUMAS_CACHE_TTL_MS
+      && !forceReload;
+    if (hasCache) {
+      /* Anında çiz — ağ bekleme yok */
+      try {
+        if (asama === 'kesim') area.innerHTML = renderKesim(filtreSiparisId());
+        else if (asama === 'yikama') area.innerHTML = renderYikama(filtreSiparisId());
+        else if (asama === 'kalite') area.innerHTML = renderKalite(filtreSiparisId());
+        else if (asama === 'sevk') area.innerHTML = renderSevk(filtreSiparisId());
+      } catch (e) { /* fallthrough */ return; }
+      return;
+    }
+    area.innerHTML = '<div class="loading"><div class="spinner"></div><div style="margin-top:8px;font-size:12px;color:var(--text2)">Liste yükleniyor…</div></div>';
     try {
+      if (forceReload) await loadKumasGelis(true);
       area.innerHTML = await renderAsama(asama);
     } catch (e) {
       area.innerHTML = emptyBox('Yüklenemedi: ' + (e.message || e));
@@ -479,7 +558,7 @@
       }]);
       await siparisDurumSenkron(row.siparis_id);
       toast(rota === 'YIKAMA' ? 'Kesim kaydedildi → Yıkama' : 'Kesim kaydedildi → Kalite');
-      await yenile();
+      await yenile(true);
     } catch (e) { toast('Kayıt hatası: ' + (e.message || e), false); }
   }
 
@@ -513,7 +592,7 @@
       }]);
       await siparisDurumSenkron(row.siparis_id);
       toast(sevkAd + ' ad yıkamaya sevk edildi');
-      await yenile();
+      await yenile(true);
     } catch (e) { toast('Kayıt hatası: ' + (e.message || e), false); }
   }
 
@@ -551,7 +630,7 @@
       }]);
       await siparisDurumSenkron(row.siparis_id);
       toast('Yıkama gelen kaydedildi (+' + gelAd + ')');
-      await yenile();
+      await yenile(true);
     } catch (e) { toast('Kayıt hatası: ' + (e.message || e), false); }
   }
 
@@ -588,7 +667,7 @@
       }]);
       await siparisDurumSenkron(row.siparis_id);
       toast('Paket kaydedildi (+' + gecAd + ')');
-      await yenile();
+      await yenile(true);
     } catch (e) { toast('Kayıt hatası: ' + (e.message || e), false); }
   }
 
@@ -625,7 +704,7 @@
       }]);
       await siparisDurumSenkron(row.siparis_id);
       toast('Sevk edildi (+' + sevkAd + ')');
-      await yenile();
+      await yenile(true);
     } catch (e) { toast('Kayıt hatası: ' + (e.message || e), false); }
   }
 
@@ -633,6 +712,8 @@
     load: loadKumasGelis,
     yenile,
     renderAsama,
+    setArama,
+    getArama: () => _aramaQ,
     kesimKaydet,
     yikamaSevkKaydet,
     yikamaGelenKaydet,
