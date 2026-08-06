@@ -353,6 +353,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 let sb=null,currentUser=null,siparisler=[],selectedSiparis=null;
 let kdCache={},kdCacheTs={},girisSeciliId=null,girisKd={},girisKalemler=[],girisTab='kesim';
 let girisAktifAsama=null;
+let girisGirisModu='auto'; /* auto | pipeline | manuel */
 let aktifFilter='HEPSI',siparisAramaTerm='',simteksIds=new Set(),devamdaIds=new Set();
 let panelSiparisTum=[]; // durumdan bağımsız: log ve eşleştirme için
 let syncBusy=false,syncTimer=null;
@@ -1150,6 +1151,85 @@ function getAsamalar(){
   return PANEL_KONF_ASAMALAR.slice();
 }
 
+function girisModToggleHtml(){
+  const asama=girisAktifAsama;
+  if(!asama)return '';
+  const m=girisGirisModu==='manuel'?'manuel':(girisGirisModu==='pipeline'?'pipeline':'auto');
+  const btn=(id,lbl)=>`<button type="button" onclick="girisModSec('${id}')"
+    style="padding:6px 11px;border-radius:999px;font-size:10px;font-weight:800;cursor:pointer;font-family:inherit;border:1px solid ${m===id||(id==='pipeline'&&m==='auto')?'rgba(99,102,241,.45)':'var(--border)'};background:${m===id||(id==='pipeline'&&m==='auto')?'rgba(99,102,241,.18)':'var(--surface2)'};color:${m===id||(id==='pipeline'&&m==='auto')?'var(--accent2)':'var(--text3)'}">${lbl}</button>`;
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+    ${btn('pipeline','Depo / Pipeline')}
+    ${btn('manuel','✏️ Manuel giriş')}
+    <span style="font-size:9px;color:var(--text3);margin-left:2px">${girisSeciliId?'':'Manuel için sipariş seçin'}</span>
+  </div>`;
+}
+
+function girisModSec(mod){
+  girisGirisModu=mod==='manuel'?'manuel':'pipeline';
+  writeUiState({girisGirisModu:girisGirisModu});
+  girisAsamaIcerikGoster();
+}
+
+async function girisAsamaIcerikGoster(){
+  const area=document.getElementById('giris-form-area');
+  if(!area||!girisAktifAsama)return;
+
+  if(girisGirisModu==='manuel'){
+    if(!girisSeciliId){
+      area.innerHTML=girisModToggleHtml()+`<div class="empty" style="padding:26px 14px"><div class="icon">📝</div>
+        Manuel giriş için yukarıdan sipariş seçin.<br>
+        <span style="font-size:11px;color:var(--text3)">Depo sevki olmadan kalem bazlı adet girebilirsiniz.</span></div>`;
+      return;
+    }
+    area.innerHTML=girisModToggleHtml()+'<div class="loading"><div class="spinner"></div></div>';
+    try{
+      const[kd]=await Promise.all([
+        getKd(girisSeciliId,'KD_KONFEKSIYON',false),
+        getKd(girisSeciliId,'KD_URUN_AGACI',false)
+      ]);
+      girisKd={...kd};
+      girisKalemler=parseKalemler(siparisler.find(s=>String(s.id)===String(girisSeciliId))||{});
+      area.innerHTML=girisModToggleHtml()
+        +`<div style="font-size:10px;color:var(--text3);margin-bottom:8px;line-height:1.4">Manuel mod · sipariş kalemlerine doğrudan giriş (depo sevki şart değil)</div>`
+        +renderAsamaIcerik(girisAktifAsama);
+    }catch(e){
+      area.innerHTML=girisModToggleHtml()+`<div class="empty"><div class="icon">⚠️</div>${esc(e.message||e)}</div>`;
+    }
+    return;
+  }
+
+  /* pipeline / auto */
+  if(window.KonfPipeline && typeof KonfPipeline.yenile==='function'){
+    area.innerHTML=girisModToggleHtml()+'<div class="loading"><div class="spinner"></div><div style="margin-top:8px;font-size:12px;color:var(--text2)">Liste yükleniyor…</div></div>';
+    try{
+      await KonfPipeline.yenile(false);
+      const body=area.innerHTML;
+      const hasGirdi=/\bkalem-girdi\b/.test(body);
+      area.innerHTML=girisModToggleHtml()+body;
+      /* Mal yoksa otomatik manuel formu aç (sipariş seçiliyse) */
+      if(!hasGirdi && girisGirisModu==='auto' && girisSeciliId){
+        girisGirisModu='manuel';
+        await girisAsamaIcerikGoster();
+        return;
+      }
+      if(!hasGirdi){
+        area.innerHTML=girisModToggleHtml()
+          +body
+          +`<div style="margin-top:10px;padding:12px;border:1px dashed var(--border2);border-radius:12px;background:var(--surface2)">
+              <div style="font-size:12px;font-weight:700;margin-bottom:6px">Depoda bekleyen mal yok</div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.4">İsterseniz sipariş seçip manuel adet girebilirsiniz.</div>
+              <button type="button" class="save-btn" style="width:auto;margin:0;padding:10px 14px;background:#8b5cf6" onclick="girisModSec('manuel')">✏️ Manuel girişe geç</button>
+            </div>`;
+      }
+    }catch(e){
+      area.innerHTML=girisModToggleHtml()+`<div class="empty"><div class="icon">⚠️</div>Yüklenemedi: ${esc(e.message||e)}</div>`;
+    }
+  }else{
+    area.innerHTML=girisModToggleHtml()+`<div class="empty"><div class="icon">⚠️</div>Pipeline yüklenemedi.<br><span style="font-size:11px">konf-pipeline.js eksik olabilir — manuel girişe geçin.</span>
+      <div style="margin-top:12px"><button type="button" class="save-btn" style="width:auto;margin:0;padding:10px 14px" onclick="girisModSec('manuel')">✏️ Manuel giriş</button></div></div>`;
+  }
+}
+
 function renderGirisAsamaTabs(kdUa){
   const area=document.getElementById('giris-form-area');
   const menu=document.getElementById('giris-asama-menu');
@@ -1184,20 +1264,13 @@ function renderGirisAsamaTabs(kdUa){
        </div>`;
     return;
   }
-  /* Ana ERP pipeline paneli */
-  if(window.KonfPipeline && typeof KonfPipeline.yenile==='function'){
-    area.innerHTML='<div class="loading"><div class="spinner"></div><div style="margin-top:8px;font-size:12px;color:var(--text2)">Liste yükleniyor…</div></div>';
-    Promise.resolve(KonfPipeline.yenile(false)).catch(e=>{
-      area.innerHTML=`<div class="empty"><div class="icon">⚠️</div>Yüklenemedi: ${esc(e.message||e)}</div>`;
-    });
-  }else{
-    area.innerHTML=`<div class="empty"><div class="icon">⚠️</div>Pipeline yüklenemedi.<br><span style="font-size:11px">konf-pipeline.js dosyasını da yüklediğinizden emin olun.</span></div>`;
-  }
+  girisAsamaIcerikGoster();
 }
 
 function girisSecAsama(asama){
   girisAktifAsama=String(asama||'')||null;
-  writeUiState({girisAsama:girisAktifAsama});
+  girisGirisModu='auto'; /* her alan açılışında: varsa pipeline, yoksa manuel */
+  writeUiState({girisAsama:girisAktifAsama,girisGirisModu:girisGirisModu});
   renderGirisAsamaTabs(kdCache['KD_URUN_AGACI_'+(girisSeciliId||'')]||{});
 }
 
@@ -1835,8 +1908,11 @@ async function girisKaydet(tip){
       const detayList=Object.keys(delta).map(a=>`${detayAlanEtiket[a]||a}: +${delta[a]}`);
       if(!logAlan||yapilan>0){
         const notlar=JSON.stringify({
+          user:kullaniciAdi,
           kullanici:kullaniciAdi,
           kaynak:'konfeksiyon_panel',
+          konf_panel:true,
+          manuel_giris:true,
           kalem_idx:i,
           kalem_key:[kalem.ad||kalem.kod||'',kalem.renk||'',kalem.ebat||kalem.olcu||''].join('|'),
           urun_ad:kalem.ad||kalem.kod||'',
@@ -1861,6 +1937,8 @@ async function girisKaydet(tip){
     logTumData=[];
 
     const kdUa = await getKd(girisSeciliId,'KD_URUN_AGACI');
+    /* Manuel kayıt sonrası aynı modda kal */
+    if(girisGirisModu!=='pipeline')girisGirisModu='manuel';
     renderGirisAsamaTabs(kdUa);
     showToast('Kayıt yapıldı · ana ERP ile senkron',1800);
   }catch(e){showToast('Kayıt başarısız: '+(e.message||e),2200);}
