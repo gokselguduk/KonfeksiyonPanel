@@ -1154,6 +1154,7 @@ function renderGirisAsamaTabs(kdUa){
   const area=document.getElementById('giris-form-area');
   const menu=document.getElementById('giris-asama-menu');
   const grid=document.getElementById('giris-asama-grid');
+  if(!area)return;
   const asamalar=getAsamalar();
   if(girisAktifAsama && !asamalar.includes(girisAktifAsama))girisAktifAsama=null;
 
@@ -1184,17 +1185,20 @@ function renderGirisAsamaTabs(kdUa){
     return;
   }
   /* Ana ERP pipeline paneli */
-  if(window.KonfPipeline){
-    KonfPipeline.yenile();
+  if(window.KonfPipeline && typeof KonfPipeline.yenile==='function'){
+    area.innerHTML='<div class="loading"><div class="spinner"></div><div style="margin-top:8px;font-size:12px;color:var(--text2)">Liste yükleniyor…</div></div>';
+    Promise.resolve(KonfPipeline.yenile(false)).catch(e=>{
+      area.innerHTML=`<div class="empty"><div class="icon">⚠️</div>Yüklenemedi: ${esc(e.message||e)}</div>`;
+    });
   }else{
-    area.innerHTML=`<div class="empty"><div class="icon">⚠️</div>Pipeline yüklenemedi (konf-pipeline.js)</div>`;
+    area.innerHTML=`<div class="empty"><div class="icon">⚠️</div>Pipeline yüklenemedi.<br><span style="font-size:11px">konf-pipeline.js dosyasını da yüklediğinizden emin olun.</span></div>`;
   }
 }
 
 function girisSecAsama(asama){
-  girisAktifAsama=asama;
-  writeUiState({girisAsama:asama});
-  renderGirisAsamaTabs(kdCache['KD_URUN_AGACI_'+girisSeciliId]||{});
+  girisAktifAsama=String(asama||'')||null;
+  writeUiState({girisAsama:girisAktifAsama});
+  renderGirisAsamaTabs(kdCache['KD_URUN_AGACI_'+(girisSeciliId||'')]||{});
 }
 
 function renderAsamaIcerik(asama){

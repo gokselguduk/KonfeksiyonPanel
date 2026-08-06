@@ -236,15 +236,18 @@
           .eq('islem', 'KUMAS_GELIS')
           .order('created_at', { ascending: false })
           .limit(400);
-        if (error) { _konfGlobalKumasGelisCache = []; return; }
+        if (error) {
+          _konfGlobalKumasGelisCache = [];
+          _kumasGelisLoadedAt = 0;
+          return;
+        }
         _konfGlobalKumasGelisCache = (data || []).map(satirFromRaw);
         _kumasGelisLoadedAt = Date.now();
-        /* Ürün ağacı: sadece aktif/filtrelenen siparişler — 40 paralel sorgu yok */
+        /* Ürün ağacı arka planda — listeyi bekletme */
         const filtre = filtreSiparisId();
         let ids = [];
-        if (filtre) {
-          ids = [filtre];
-        } else {
+        if (filtre) ids = [filtre];
+        else {
           const aktif = _konfGlobalKumasGelisCache.filter(r =>
             kesimAktifMi(r) || yikamaRotaMu(r) || sevkAktifMi(r) || (kaliteOzet(r).bekleyen > 0)
           );
@@ -252,10 +255,22 @@
         }
         const missing = ids.filter(sid => !(global.kdCache || {})['KD_URUN_AGACI_' + sid]);
         if (missing.length) {
-          await Promise.all(missing.map(sid => getKd(sid, 'KD_URUN_AGACI', false).catch(() => null)));
+          Promise.all(missing.map(sid => getKd(sid, 'KD_URUN_AGACI', false).catch(() => null)))
+            .then(() => {
+              const asama = global.girisAktifAsama;
+              const area = document.getElementById('giris-form-area');
+              if (!asama || !area) return;
+              try {
+                if (asama === 'kesim') area.innerHTML = renderKesim(filtreSiparisId());
+                else if (asama === 'yikama') area.innerHTML = renderYikama(filtreSiparisId());
+                else if (asama === 'kalite') area.innerHTML = renderKalite(filtreSiparisId());
+                else if (asama === 'sevk') area.innerHTML = renderSevk(filtreSiparisId());
+              } catch (e) {}
+            });
         }
       } catch (e) {
         _konfGlobalKumasGelisCache = [];
+        _kumasGelisLoadedAt = 0;
       } finally {
         _kumasGelisInflight = null;
       }
@@ -494,23 +509,31 @@
     if (!asama) return;
     const aramaEl = document.getElementById('giris-arama');
     if (aramaEl) _aramaQ = String(aramaEl.value || '').trim();
+
+    const paint = () => {
+      if (asama === 'kesim') return renderKesim(filtreSiparisId());
+      if (asama === 'yikama') return renderYikama(filtreSiparisId());
+      if (asama === 'kalite') return renderKalite(filtreSiparisId());
+      if (asama === 'sevk') return renderSevk(filtreSiparisId());
+      return emptyBox('Alan seçin');
+    };
+
     const hasCache = _konfGlobalKumasGelisCache.length > 0
       && (Date.now() - _kumasGelisLoadedAt) < KUMAS_CACHE_TTL_MS
       && !forceReload;
     if (hasCache) {
-      /* Anında çiz — ağ bekleme yok */
-      try {
-        if (asama === 'kesim') area.innerHTML = renderKesim(filtreSiparisId());
-        else if (asama === 'yikama') area.innerHTML = renderYikama(filtreSiparisId());
-        else if (asama === 'kalite') area.innerHTML = renderKalite(filtreSiparisId());
-        else if (asama === 'sevk') area.innerHTML = renderSevk(filtreSiparisId());
-      } catch (e) { /* fallthrough */ return; }
+      try { area.innerHTML = paint(); } catch (e) {
+        area.innerHTML = emptyBox('Çizim hatası: ' + (e.message || e));
+      }
       return;
     }
+
     area.innerHTML = '<div class="loading"><div class="spinner"></div><div style="margin-top:8px;font-size:12px;color:var(--text2)">Liste yükleniyor…</div></div>';
     try {
-      if (forceReload) await loadKumasGelis(true);
-      area.innerHTML = await renderAsama(asama);
+      const loadPromise = loadKumasGelis(!!forceReload);
+      const timeout = new Promise(resolve => setTimeout(resolve, 12000));
+      await Promise.race([loadPromise, timeout]);
+      area.innerHTML = paint();
     } catch (e) {
       area.innerHTML = emptyBox('Yüklenemedi: ' + (e.message || e));
     }
