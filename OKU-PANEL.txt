@@ -1,0 +1,20 @@
+KONFEKSİYON PANELİ — AKTİF
+==========================
+
+Dosya: konfeksiyon-mobil.html
+Açılış: bu klasördeki dosyayı tarayıcıda açın
+        (yerel sunucu veya hosting)
+
+Bu panelde kullanıcı:
+  • Sipariş listesini görür
+  • Sipariş detayını açar (Özet / Kalemler / Üretim / Resimler / Notlar)
+  • Üretimde YALNIZCA şu sekmeleri görür:
+      1) Kesim
+      2) Yıkama
+      3) Kalite
+      4) Konfeksiyon Sevk
+
+Görünmez: Dokuma, Dikim, Nakış, Planlama, Maliyet, Depo vb.
+
+Giriş: ERP kullanıcı adı / şifre (KONFEKSIYON yetkisi gerekir)
+Config: erp-config.js (Supabase)
