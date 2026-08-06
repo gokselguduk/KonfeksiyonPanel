@@ -257,6 +257,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div id="tab-giris" class="content" style="display:none">
     <div class="sel-card">
       <div class="sec-title" style="margin-bottom:7px">Konfeksiyon</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.45">
+        <b>Siparişler → Manuel giriş</b> · elle adet<br>
+        <b>Bu menü → Depo sevk</b> · Dokuma’dan gelenler
+      </div>
       <div style="position:relative;margin-bottom:6px">
         <input id="giris-arama" class="field-input" type="search" enterkeyhint="search"
           placeholder="🔍 Sipariş no, müşteri, kumaş, stok, renk…"
@@ -353,8 +357,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 let sb=null,currentUser=null,siparisler=[],selectedSiparis=null;
 let kdCache={},kdCacheTs={},girisSeciliId=null,girisKd={},girisKalemler=[],girisTab='kesim';
 let girisAktifAsama=null;
-let girisGirisModu='manuel'; /* manuel | pipeline — varsayılan manuel */
+let girisGirisModu='pipeline'; /* manuel | pipeline */
+let girisKaynak='sekme'; /* siparis = Siparişler→Git | sekme = Konfeksiyon menü */
 let girisShowSeq=0;
+let _girisAcSiparisden=false;
 let aktifFilter='HEPSI',siparisAramaTerm='',simteksIds=new Set(),devamdaIds=new Set();
 let panelSiparisTum=[]; // durumdan bağımsız: log ve eşleştirme için
 let syncBusy=false,syncTimer=null;
@@ -776,14 +782,26 @@ function sipItem(s){
 
 function girisSiparisAc(id,asama){
   closeModal();
+  _girisAcSiparisden=true;
+  girisKaynak='siparis';
+  girisGirisModu='manuel';
+  girisAktifAsama=(asama && PANEL_KONF_ASAMALAR.includes(asama))?asama:'kesim';
+  writeUiState({girisAsama:girisAktifAsama,girisSiparisId:String(id),girisGirisModu:'manuel',girisKaynak:'siparis'});
   switchTab('giris',1);
   const sel=document.getElementById('giris-siparis-sel');
-  if(sel){sel.value=String(id);}
-  if(asama && PANEL_KONF_ASAMALAR.includes(asama)){
-    girisAktifAsama=asama;
-    writeUiState({girisAsama:asama,girisSiparisId:String(id)});
+  if(sel){
+    if(![...sel.options].some(o=>String(o.value)===String(id))){
+      const s=siparisler.find(x=>String(x.id)===String(id))||(panelSiparisTum||[]).find(x=>String(x.id)===String(id));
+      if(s){
+        const opt=document.createElement('option');
+        opt.value=String(id);
+        opt.textContent=`${s.sno||'—'} · ${s.firma||''}`;
+        sel.appendChild(opt);
+      }
+    }
+    sel.value=String(id);
   }
-  girisLoadSiparis();
+  girisLoadSiparis().finally(()=>{ _girisAcSiparisden=false; });
 }
 
 function openSiparis(id){
@@ -1008,7 +1026,7 @@ async function renderSiparisDetay(){
     <div class="sec-title" style="margin:16px 0 8px">Ürün Görselleri${urls.length?` · ${urls.length}`:''}</div>
     ${gorselHtml}
     <button type="button" class="save-btn" style="background:linear-gradient(135deg,var(--accent),var(--violet));margin-top:14px"
-      onclick="girisSiparisAc('${sid}')">🏭 Konfeksiyon Girişine Git</button>
+      onclick="girisSiparisAc('${sid}')">✏️ Manuel konfeksiyon girişine git</button>
   `;
 }
 
@@ -1166,15 +1184,21 @@ function girisModToggleHtml(){
   const m=girisGirisModu==='pipeline'?'pipeline':'manuel';
   const btn=(id,lbl)=>`<button type="button" onclick="girisModSec('${id}')"
     style="padding:8px 12px;border-radius:999px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;border:1px solid ${m===id?'rgba(99,102,241,.5)':'var(--border)'};background:${m===id?'rgba(99,102,241,.2)':'var(--surface2)'};color:${m===id?'var(--accent2)':'var(--text3)'}">${lbl}</button>`;
-  return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-    ${btn('manuel','✏️ Manuel giriş')}
-    ${btn('pipeline','Depo / Pipeline')}
-  </div>`;
+  const ipucu=girisKaynak==='siparis'
+    ?'Siparişten gelindi · manuel giriş'
+    :'Konfeksiyon menüsü · Dokuma Depo sevkleri';
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+    ${btn('manuel','✏️ Manuel')}
+    ${btn('pipeline','🏭 Depo sevk')}
+  </div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:10px;line-height:1.35">${ipucu}</div>`;
 }
 
 function girisModSec(mod){
   girisGirisModu=mod==='pipeline'?'pipeline':'manuel';
-  writeUiState({girisGirisModu:girisGirisModu});
+  if(girisGirisModu==='manuel')girisKaynak='siparis';
+  else girisKaynak='sekme';
+  writeUiState({girisGirisModu:girisGirisModu,girisKaynak:girisKaynak});
   girisAsamaIcerikGoster();
 }
 
@@ -1299,12 +1323,9 @@ function renderGirisAsamaTabs(kdUa){
     grid.innerHTML=asamalar.map(a=>{
       const m=UA_ASAMALAR_MAP[a]||{label:a,ikon:'⚙️',color:'#6366f1'};
       const active=a===girisAktifAsama;
-      const sub={
-        kesim:'Manuel veya depo',
-        yikama:'Manuel veya depo',
-        kalite:'Manuel veya depo',
-        sevk:'Manuel veya depo'
-      }[a]||'';
+      const sub=girisKaynak==='siparis'
+        ?({kesim:'Manuel kesim',yikama:'Manuel yıkama',kalite:'Manuel kalite',sevk:'Manuel sevk'}[a]||'Manuel')
+        :({kesim:'Dokuma Depo → Kesim',yikama:'Yıkamaya sevk / gelen',kalite:'Kalite / Paket',sevk:'Konfeksiyon Sevk'}[a]||'Depo');
       return `<button type="button" class="asama-tile${active?' active':''}" style="--tile-c:${m.color}" onclick="girisSecAsama('${a}')">
         <span class="at-ico">${m.ikon}</span>
         <span class="at-lbl">${m.label}</span>
@@ -1316,7 +1337,9 @@ function renderGirisAsamaTabs(kdUa){
   if(!girisAktifAsama){
     area.innerHTML=`<div class="empty" style="padding:26px 20px;background:var(--surface);border:1px solid var(--border);border-radius:12px">
          <div class="icon">👆</div>
-         Alan seçin — varsayılan <b>manuel giriş</b> açılır.
+         ${girisKaynak==='siparis'
+           ?'Alan seçin — <b>manuel giriş</b> açılacak.'
+           :'Alan seçin — <b>Dokuma Depo’dan sevk edilenler</b> listelenir.<br><span style="font-size:11px;color:var(--text3)">Siparişten “Manuel girişe git” ile elle giriş yapılır.</span>'}
        </div>`;
     return;
   }
@@ -1325,8 +1348,9 @@ function renderGirisAsamaTabs(kdUa){
 
 function girisSecAsama(asama){
   girisAktifAsama=String(asama||'')||null;
-  girisGirisModu='manuel'; /* her zaman önce manuel form */
-  writeUiState({girisAsama:girisAktifAsama,girisGirisModu:'manuel'});
+  /* Siparişten gelince manuel; Konfeksiyon sekmesinden gelince depo pipeline */
+  girisGirisModu=(girisKaynak==='siparis')?'manuel':'pipeline';
+  writeUiState({girisAsama:girisAktifAsama,girisGirisModu:girisGirisModu,girisKaynak:girisKaynak});
   renderGirisAsamaTabs(kdCache['KD_URUN_AGACI_'+(girisSeciliId||'')]||{});
 }
 
@@ -2170,10 +2194,17 @@ function switchTab(t,idx){
   document.querySelectorAll('#main-tab-bar .bottom-nav-btn').forEach((b,i)=>b.classList.toggle('active',i===activeIdx));
   writeUiState({activeTab:t});
   if(t==='giris'){
-    renderGirisAsamaTabs(kdCache['KD_URUN_AGACI_'+(girisSeciliId||'')]||{});
-    if(girisSeciliId && oncekiAktif!=='giris'){
-      setTimeout(()=>{girisLoadSiparis().catch(()=>{});},0);
+    /* Alt menüden Konfeksiyon’a girince: Dokuma Depo sevkleri (pipeline) */
+    if(!_girisAcSiparisden && oncekiAktif!=='giris'){
+      girisKaynak='sekme';
+      girisGirisModu='pipeline';
+      girisSeciliId=null;
+      girisAktifAsama=null;
+      const sel=document.getElementById('giris-siparis-sel');
+      if(sel)sel.value='';
+      writeUiState({girisKaynak:'sekme',girisGirisModu:'pipeline',girisSiparisId:null,girisAsama:null});
     }
+    renderGirisAsamaTabs(kdCache['KD_URUN_AGACI_'+(girisSeciliId||'')]||{});
   }else if(t==='rapor'){
     if(window.KonfRapor) KonfRapor.yenile(oncekiAktif!=='rapor');
   }else if(t==='log'){
