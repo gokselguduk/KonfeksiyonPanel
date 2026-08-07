@@ -293,14 +293,20 @@
     const { data, error } = await sb().from('siparis_akis')
       .select('id,islem,kalem_ad,miktar,notlar')
       .eq('siparis_id', siparisId)
-      .in('islem', ['KUMAS_GELIS', 'KESIM', 'YIKAMA_GELEN', 'KK_GECEN', 'KONF_SEVK', 'SEVK', 'KALITE']);
+      .in('islem', [
+        'KUMAS_GELIS', 'KESIM', 'DIKIM', 'YIKAMA_SEVK', 'YIKAMA_GELEN', 'YIKAMA',
+        'KK_GECEN', 'KALITE', 'KOLI', 'KONF_SEVK', 'SEVK'
+      ]);
     if (error) return;
     const per = {};
-    kalemler.forEach((_, i) => { per[i] = { kesilen: 0, yikGel: 0, kkGec: 0, sevk: 0 }; });
+    kalemler.forEach((_, i) => {
+      per[i] = { kesilen: 0, dikilen: 0, yikSevk: 0, yikGel: 0, kkGec: 0, koli: 0, sevk: 0 };
+    });
     let panelYikSevk = 0, panelYikGel = 0;
     (data || []).forEach(r => {
       let j = {};
       try { j = JSON.parse(r.notlar || '{}') || {}; } catch (e) {}
+      if (j.panel_silindi || j.silindi) return;
       const islem = String(r.islem || '').toUpperCase().replace(/İ/g, 'I');
       let ki = parseInt(j.kalem_idx, 10);
       if (!Number.isFinite(ki) || ki < 0 || ki >= kalemler.length) ki = -1;
@@ -308,6 +314,7 @@
       if (islem === 'KUMAS_GELIS') {
         if (ki >= 0) {
           per[ki].kesilen += parseInt(j.kesilen_adet || 0, 10) || 0;
+          per[ki].yikSevk += parseInt((j.yikama_sevk_adet ?? j.yikama_bekleyen_adet) || 0, 10) || 0;
           per[ki].yikGel += parseInt(j.yikama_gelen_adet || 0, 10) || 0;
           per[ki].kkGec += parseInt(j.kalite_gecen_adet || 0, 10) || 0;
           per[ki].sevk += parseInt(j.sevk_edilen_adet || 0, 10) || 0;
@@ -319,31 +326,53 @@
       if (j.kumas_gelis_id) return;
       if (ki < 0) return;
       if (islem === 'KESIM') per[ki].kesilen += mik;
-      else if (islem === 'YIKAMA_GELEN') { per[ki].yikGel += mik; panelYikGel += mik; }
-      else if (islem === 'KK_GECEN' || islem === 'KALITE') per[ki].kkGec += mik;
+      else if (islem === 'DIKIM') per[ki].dikilen += mik;
+      else if (islem === 'YIKAMA_SEVK' || islem === 'YIKAMA') {
+        per[ki].yikSevk += mik;
+        panelYikSevk += mik;
+      } else if (islem === 'YIKAMA_GELEN') {
+        per[ki].yikGel += mik;
+        panelYikGel += mik;
+      } else if (islem === 'KK_GECEN' || islem === 'KALITE') per[ki].kkGec += mik;
+      else if (islem === 'KOLI') per[ki].koli += mik;
       else if (islem === 'KONF_SEVK' || islem === 'SEVK') per[ki].sevk += mik;
     });
     const kd = (await getKd(siparisId, 'KD_KONFEKSIYON', true)) || {};
-    let kesimTop = 0, sevkTop = 0;
+    let kesimTop = 0, dikimTop = 0, kkTop = 0, koliTop = 0, sevkTop = 0, yikSevkKalem = 0;
     kalemler.forEach((_, i) => {
       const key = 'kalem_' + i;
       if (!kd[key]) kd[key] = {};
       const p = per[i];
-      if (p.kesilen > 0) kd[key].kesilen = Math.max(parseInt(kd[key].kesilen || 0, 10), Math.round(p.kesilen));
-      if (p.yikGel > 0) kd[key].yikama_gelen = Math.max(parseInt(kd[key].yikama_gelen || 0, 10), Math.round(p.yikGel));
-      if (p.kkGec > 0) kd[key].kk_gecen = Math.max(parseInt(kd[key].kk_gecen || 0, 10), Math.round(p.kkGec));
+      if (p.kesilen > 0) kd[key].kesilen = Math.max(parseInt(kd[key].kesilen || 0, 10) || 0, Math.round(p.kesilen));
+      if (p.dikilen > 0) kd[key].dikilen = Math.max(parseInt(kd[key].dikilen || 0, 10) || 0, Math.round(p.dikilen));
+      if (p.yikSevk > 0) kd[key].yikama_sevk = Math.max(parseInt(kd[key].yikama_sevk || 0, 10) || 0, Math.round(p.yikSevk));
+      if (p.yikGel > 0) kd[key].yikama_gelen = Math.max(parseInt(kd[key].yikama_gelen || 0, 10) || 0, Math.round(p.yikGel));
+      if (p.kkGec > 0) kd[key].kk_gecen = Math.max(parseInt(kd[key].kk_gecen || 0, 10) || 0, Math.round(p.kkGec));
+      if (p.koli > 0) kd[key].kolide = Math.max(parseInt(kd[key].kolide || 0, 10) || 0, Math.round(p.koli));
       if (p.sevk > 0) {
-        kd[key].sevk_edilen = Math.max(parseInt(kd[key].sevk_edilen || 0, 10), Math.round(p.sevk));
-        kd[key].sevk_adet = kd[key].sevk_edilen;
+        const sev = Math.max(
+          parseInt(kd[key].sevk_edilen || 0, 10) || 0,
+          parseInt(kd[key].sevk_adet || 0, 10) || 0,
+          Math.round(p.sevk)
+        );
+        kd[key].sevk_edilen = sev;
+        kd[key].sevk_adet = sev;
       }
       kesimTop += parseInt(kd[key].kesilen || 0, 10) || 0;
-      sevkTop += parseInt(kd[key].sevk_edilen || 0, 10) || 0;
+      dikimTop += parseInt(kd[key].dikilen || 0, 10) || 0;
+      kkTop += parseInt(kd[key].kk_gecen || 0, 10) || 0;
+      koliTop += parseInt(kd[key].kolide || 0, 10) || 0;
+      sevkTop += Math.max(parseInt(kd[key].sevk_edilen || 0, 10) || 0, parseInt(kd[key].sevk_adet || 0, 10) || 0);
+      yikSevkKalem += parseInt(kd[key].yikama_sevk || 0, 10) || 0;
     });
-    if (kesimTop > 0) kd.kesim_toplam = Math.max(parseInt(kd.kesim_toplam || 0, 10), kesimTop);
-    if (sevkTop > 0) kd.panel_sevk_toplam = Math.max(parseInt(kd.panel_sevk_toplam || 0, 10), sevkTop);
-    if (panelYikSevk > 0) kd.panel_yikama_sevk = Math.max(parseInt(kd.panel_yikama_sevk || 0, 10), panelYikSevk);
-    if (panelYikGel > 0) {
-      kd.panel_yikama_gelen = Math.max(parseInt(kd.panel_yikama_gelen || 0, 10), panelYikGel);
+    kd.kesim_toplam = Math.max(parseInt(kd.kesim_toplam || 0, 10) || 0, kesimTop);
+    kd.dikim_toplam = Math.max(parseInt(kd.dikim_toplam || 0, 10) || 0, dikimTop);
+    kd.kk_gecen = Math.max(parseInt(kd.kk_gecen || 0, 10) || 0, kkTop);
+    kd.koli_toplam = Math.max(parseInt(kd.koli_toplam || 0, 10) || 0, koliTop);
+    kd.panel_sevk_toplam = Math.max(parseInt(kd.panel_sevk_toplam || 0, 10) || 0, sevkTop);
+    kd.panel_yikama_sevk = Math.max(parseInt(kd.panel_yikama_sevk || 0, 10) || 0, panelYikSevk, yikSevkKalem);
+    if (panelYikGel > 0 || yikSevkKalem > 0 || panelYikSevk > 0) {
+      kd.panel_yikama_gelen = Math.max(parseInt(kd.panel_yikama_gelen || 0, 10) || 0, panelYikGel);
       kd.yikama_yapildi = true;
     }
     kd.konf_pipeline_son_senkron = new Date().toISOString();
@@ -742,6 +771,7 @@
     yikamaGelenKaydet,
     kaliteKaydet,
     sevkKaydet,
+    siparisDurumSenkron,
     getCache: () => _konfGlobalKumasGelisCache
   };
 })(window);

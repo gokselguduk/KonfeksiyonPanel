@@ -142,6 +142,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .kpi-box{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:11px 8px;text-align:center}
 .kpi-val{font-size:21px;font-weight:800}
 .kpi-lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+.sip-ozet-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-bottom:10px}
+@media(min-width:420px){.sip-ozet-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.sip-ozet-kart{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 10px 9px;text-align:left;cursor:pointer;transition:border-color .15s,background .15s,transform .1s;font:inherit;color:inherit;width:100%}
+.sip-ozet-kart:active{transform:scale(.98)}
+.sip-ozet-kart.is-active{border-color:rgba(99,102,241,.55);background:rgba(99,102,241,.1);box-shadow:inset 0 0 0 1px rgba(99,102,241,.2)}
+.sip-ozet-kart .oz-val{font-size:20px;font-weight:800;line-height:1;letter-spacing:-.3px}
+.sip-ozet-kart .oz-lbl{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.35px;margin-top:5px;line-height:1.25}
+.sip-ozet-kart .oz-hint{font-size:8px;color:var(--text3);margin-top:3px;opacity:.85;line-height:1.3}
+.home-acc{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:10px}
+.home-acc-head{width:100%;display:flex;align-items:center;gap:10px;padding:13px 14px;background:var(--surface2);border:none;color:var(--text);font:inherit;cursor:pointer;text-align:left}
+.home-acc-head:active{opacity:.9}
+.home-acc-head .ha-ico{font-size:16px;flex-shrink:0}
+.home-acc-head .ha-title{flex:1;font-size:12px;font-weight:800;letter-spacing:.4px;text-transform:uppercase}
+.home-acc-head .ha-sub{font-size:10px;color:var(--text3);font-weight:600;text-transform:none;letter-spacing:0}
+.home-acc-head .ha-chev{font-size:12px;color:var(--text3);transition:transform .2s;flex-shrink:0}
+.home-acc.open .ha-chev{transform:rotate(180deg)}
+.home-acc-body{display:none;padding:12px 12px 14px;border-top:1px solid var(--border)}
+.home-acc.open .home-acc-body{display:block}
+.rapor-bar-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.rapor-bar-lbl{width:72px;flex-shrink:0;font-size:10px;font-weight:700;color:var(--text2);line-height:1.2}
+.rapor-bar-track{flex:1;height:12px;background:var(--surface3);border-radius:999px;overflow:hidden}
+.rapor-bar-fill{height:100%;border-radius:999px;min-width:2px;transition:width .35s ease}
+.rapor-bar-val{width:42px;flex-shrink:0;text-align:right;font-size:11px;font-weight:800;font-variant-numeric:tabular-nums}
+.rapor-stage{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:8px;background:var(--surface2)}
+.rapor-stage-head{width:100%;display:flex;align-items:center;gap:8px;padding:11px 12px;background:transparent;border:none;color:var(--text);font:inherit;cursor:pointer;text-align:left}
+.rapor-stage-body{display:none;padding:0 12px 12px;border-top:1px solid var(--border)}
+.rapor-stage.open .rapor-stage-body{display:block}
+.rapor-stage.open .rapor-stage-head .ha-chev{transform:rotate(180deg)}
 .sec-title{font-size:10px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--text3);margin-bottom:7px;margin-top:2px}
 .sel-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:10px}
 .giris-subtab-bar{display:flex;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px}
@@ -244,7 +272,57 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 
 <div id="app">
-  <div id="tab-siparisler" class="content">
+  <div id="tab-home" class="content">
+    <div class="sec-title" style="margin-bottom:6px">Sipariş durumu</div>
+    <div id="siparis-ozet" class="sip-ozet-grid">
+      <div class="loading" style="grid-column:1/-1;padding:18px"><div class="spinner"></div></div>
+    </div>
+    <div style="font-size:10px;color:var(--text3);margin:-2px 0 12px;line-height:1.4">Karta tıklayınca sipariş listesi açılır.</div>
+
+    <div class="home-acc open" id="home-acc-rapor-wrap">
+      <button type="button" class="home-acc-head" onclick="homeAccToggle('rapor')">
+        <span class="ha-ico">📊</span>
+        <span class="ha-title">Rapor <span class="ha-sub">· grafik · ürün kırılımı</span></span>
+        <span class="ha-chev">▼</span>
+      </button>
+      <div class="home-acc-body" id="home-acc-rapor">
+        <div id="rapor-root">
+          <div class="empty"><div class="icon">📊</div>Rapor yükleniyor…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="home-acc open" id="home-acc-log-wrap">
+      <button type="button" class="home-acc-head" onclick="homeAccToggle('log')">
+        <span class="ha-ico">🕘</span>
+        <span class="ha-title">Geçmiş <span class="ha-sub">· filtre · revize</span></span>
+        <span class="ha-chev">▼</span>
+      </button>
+      <div class="home-acc-body" id="home-acc-log">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.4">
+          Panelden yapılan ekleme / değişiklikler. Tıklayarak revize veya silin.
+        </div>
+        <input id="log-search" class="field-input" type="search" enterkeyhint="search"
+          placeholder="🔍 Sipariş, kullanıcı, işlem, ürün…"
+          oninput="logFiltrele()" style="margin-bottom:8px;font-size:14px">
+        <div id="log-filter-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+          <button type="button" class="filter-chip active" onclick="logSetFilter('HEPSI',this)">Hepsi</button>
+          <button type="button" class="filter-chip" onclick="logSetFilter('panel',this)">Panel</button>
+          <button type="button" class="filter-chip" onclick="logSetFilter('kesim',this)">Kesim</button>
+          <button type="button" class="filter-chip" onclick="logSetFilter('yikama',this)">Yıkama</button>
+          <button type="button" class="filter-chip" onclick="logSetFilter('kalite',this)">Kalite</button>
+          <button type="button" class="filter-chip" onclick="logSetFilter('sevk',this)">Sevk</button>
+          <button type="button" class="filter-chip" onclick="logSetFilter('denetim',this)">Denetim</button>
+        </div>
+        <div id="log-ozet" class="kpi-row" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px"></div>
+        <div id="log-area"><div class="loading"><div class="spinner"></div></div></div>
+        <button type="button" id="log-more" onclick="logDahaFazla()" style="display:none;width:100%;margin-top:8px;padding:12px;border-radius:12px;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);font-weight:700;font-size:12px;cursor:pointer;font-family:inherit">Daha fazla göster</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-siparisler" class="content" style="display:none">
+    <div class="sec-title" style="margin-bottom:6px">Sipariş listesi</div>
     <input id="siparis-arama" class="field-input" type="search" enterkeyhint="search"
       placeholder="🔍 Sipariş no, müşteri, ürün, durum, tarih…"
       oninput="siparisAramaFiltrele()"
@@ -283,52 +361,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
   </div>
 
-  <div id="tab-rapor" class="content" style="display:none">
-    <div id="rapor-root">
-      <div class="empty"><div class="icon">📊</div>Rapor yükleniyor…</div>
-    </div>
-  </div>
-
-  <div id="tab-log" class="content" style="display:none">
-    <div class="sel-card" style="margin-bottom:10px">
-      <div class="sec-title" style="margin-bottom:6px">İşlem Geçmişi</div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.4">
-        Panelden yapılan ekleme / değişiklikler. Tıklayarak revize veya silin — kim ne yaptı kaydı silinmez.
-      </div>
-      <input id="log-search" class="field-input" type="search" enterkeyhint="search"
-        placeholder="🔍 Sipariş, kullanıcı, işlem, ürün…"
-        oninput="logFiltrele()" style="margin-bottom:8px;font-size:14px">
-      <div id="log-filter-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
-        <button type="button" class="filter-chip active" onclick="logSetFilter('HEPSI',this)">Hepsi</button>
-        <button type="button" class="filter-chip" onclick="logSetFilter('panel',this)">Panel</button>
-        <button type="button" class="filter-chip" onclick="logSetFilter('kesim',this)">Kesim</button>
-        <button type="button" class="filter-chip" onclick="logSetFilter('yikama',this)">Yıkama</button>
-        <button type="button" class="filter-chip" onclick="logSetFilter('kalite',this)">Kalite</button>
-        <button type="button" class="filter-chip" onclick="logSetFilter('sevk',this)">Sevk</button>
-        <button type="button" class="filter-chip" onclick="logSetFilter('denetim',this)">Denetim</button>
-      </div>
-    </div>
-    <div id="log-ozet" class="kpi-row" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px"></div>
-    <div id="log-area"><div class="loading"><div class="spinner"></div></div></div>
-    <button type="button" id="log-more" onclick="logDahaFazla()" style="display:none;width:100%;margin-top:8px;padding:12px;border-radius:12px;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);font-weight:700;font-size:12px;cursor:pointer;font-family:inherit">Daha fazla göster</button>
-  </div>
-
   <nav class="bottom-nav" id="main-tab-bar" aria-label="Ana menü">
-    <button type="button" class="bottom-nav-btn active" onclick="switchTab('siparisler',0)">
+    <button type="button" class="bottom-nav-btn active" onclick="switchTab('home',0)">
+      <span class="bn-ico">🏠</span>
+      <span class="bn-lbl">Ana Sayfa</span>
+    </button>
+    <button type="button" class="bottom-nav-btn" onclick="switchTab('siparisler',1)">
       <span class="bn-ico">📋</span>
       <span class="bn-lbl">Siparişler</span>
     </button>
-    <button type="button" class="bottom-nav-btn" onclick="switchTab('giris',1)">
+    <button type="button" class="bottom-nav-btn" onclick="switchTab('giris',2)">
       <span class="bn-ico">🏭</span>
       <span class="bn-lbl">Konfeksiyon</span>
-    </button>
-    <button type="button" class="bottom-nav-btn" onclick="switchTab('rapor',2)">
-      <span class="bn-ico">📊</span>
-      <span class="bn-lbl">Rapor</span>
-    </button>
-    <button type="button" class="bottom-nav-btn" onclick="switchTab('log',3)">
-      <span class="bn-ico">🕘</span>
-      <span class="bn-lbl">Geçmiş</span>
     </button>
   </nav>
 </div>
@@ -361,8 +405,11 @@ let girisGirisModu='pipeline'; /* manuel | pipeline */
 let girisKaynak='sekme'; /* siparis = Siparişler→Git | sekme = Konfeksiyon menü */
 let girisShowSeq=0;
 let _girisAcSiparisden=false;
-let aktifFilter='HEPSI',siparisAramaTerm='',simteksIds=new Set(),devamdaIds=new Set();
-let panelSiparisTum=[]; // durumdan bağımsız: log ve eşleştirme için
+let aktifFilter='TOPLAM',siparisAramaTerm='',simteksIds=new Set(),devamdaIds=new Set();
+let panelSiparisTum=[]; // Simteks konf — tamamlananlar dahil
+let dokumaIds=new Set(); // KD_DOKUMA kaydı olanlar
+let konfVeriIds=new Set(); // konfeksiyon veri / hareketi olanlar
+let siparisOzetSayac={};
 let syncBusy=false,syncTimer=null;
 const UI_STATE_KEY='konf_ui_state';
 function readUiState(){
@@ -375,16 +422,29 @@ function writeUiState(patch){
   }catch{}
 }
 function tabToIdx(t){
-  return ({siparisler:0,giris:1,rapor:2,log:3})[t] ?? 0;
+  return ({home:0,siparisler:1,giris:2,rapor:0,log:0})[t] ?? 0;
 }
 async function restoreUiState(){
   const st=readUiState();
-  const tab=['giris','siparisler','rapor','log'].includes(st?.activeTab)?st.activeTab:'siparisler';
+  let tab=st?.activeTab;
+  if(tab==='rapor'||tab==='log')tab='home';
+  if(!['home','giris','siparisler'].includes(tab))tab='home';
 
   const siparisAramaEl=document.getElementById('siparis-arama');
   if(siparisAramaEl && typeof st?.siparisArama==='string'){
     siparisAramaEl.value=st.siparisArama;
     siparisAramaTerm=st.siparisArama;
+  }
+  const allowedFiltre=['TOPLAM','AKTIF','URETIMDE','VERI','DOKUMA','GELECEK','HEPSI','DEVAMDA','BEKLEMEDE'];
+  if(allowedFiltre.includes(st?.siparisFilter)){
+    aktifFilter=st.siparisFilter==='HEPSI'?'TOPLAM'
+      :(st.siparisFilter==='DEVAMDA'?'VERI'
+      :(st.siparisFilter==='BEKLEMEDE'?'GELECEK':st.siparisFilter));
+  }
+  if(st?.siparisFilter==='TAMAMLANDI'||st?.siparisFilter==='AKTIF')aktifFilter='TOPLAM';
+  if(panelSiparisTum.length){
+    renderSiparisOzet();
+    renderSiparisler();
   }
 
   const girisAramaEl=document.getElementById('giris-arama');
@@ -405,6 +465,13 @@ async function restoreUiState(){
   if(logSearchEl && typeof st?.logSearch==='string'){
     logSearchEl.value=st.logSearch;
     logSearchTerm=st.logSearch.toLowerCase().trim();
+  }
+
+  if(typeof st?.homeAccRapor==='boolean'){
+    document.getElementById('home-acc-rapor-wrap')?.classList.toggle('open',st.homeAccRapor);
+  }
+  if(typeof st?.homeAccLog==='boolean'){
+    document.getElementById('home-acc-log-wrap')?.classList.toggle('open',st.homeAccLog);
   }
 
   switchTab(tab,tabToIdx(tab));
@@ -605,32 +672,27 @@ async function startApp(){
 
 async function loadSiparisler(){
   try{
-    const gizli=['TAMAMLANDI','İPTAL','IPTAL'];
-    /* Gerçek siparisler kolonları (ana ERP ile aynı) */
+    const ozetEl=document.getElementById('siparis-ozet');
+    if(ozetEl)ozetEl.innerHTML=`<div class="loading" style="grid-column:1/-1;padding:18px"><div class="spinner"></div></div>`;
+    /* Gerçek siparisler kolonları (ana ERP ile aynı) — tamamlananlar da özet için gelir */
     const SIP_COLS='id,created_at,notlar,sno,firma,miktar,kaynak_birim,durum,cins,starih,ttarih,uretim_yeri,siparis_grubu';
     const SIP_COLS_CORE='id,created_at,notlar,sno,firma,miktar,kaynak_birim,durum,cins,starih,ttarih';
     let tumSiparisler=[];
     let sipRes=await sb.from('siparisler')
       .select(SIP_COLS)
-      .not('durum','in','("TAMAMLANDI","İPTAL","IPTAL")')
       .order('created_at',{ascending:false})
-      .limit(400);
+      .limit(600);
     if(sipRes.error){
-      /* uretim_yeri / siparis_grubu yoksa çekirdek kolonlar */
       sipRes=await sb.from('siparisler')
         .select(SIP_COLS_CORE)
-        .not('durum','in','("TAMAMLANDI","İPTAL","IPTAL")')
         .order('created_at',{ascending:false})
-        .limit(400);
-      if(sipRes.error){
-        sipRes=await sb.from('siparisler')
-          .select(SIP_COLS_CORE)
-          .order('created_at',{ascending:false})
-          .limit(400);
-        if(sipRes.error)throw sipRes.error;
-      }
+        .limit(600);
+      if(sipRes.error)throw sipRes.error;
     }
-    tumSiparisler=sipRes.data||[];
+    tumSiparisler=(sipRes.data||[]).filter(s=>{
+      const d=siparisDurumNormPanel(s.durum);
+      return d!=='İPTAL';
+    });
 
     /* Kolonda net seçilmiş olanları ayır; belirsizler için ürün ağacı çek */
     const kesin=[];
@@ -646,7 +708,6 @@ async function loadSiparisler(){
     const uaSimteks=belirsiz.filter(s=>isKonfeksiyonPanelSiparisi(s,uaMap[String(s.id)]||{}));
 
     panelSiparisTum=[...kesin,...uaSimteks];
-    /* Tekilleştir */
     const seen=new Set();
     panelSiparisTum=panelSiparisTum.filter(s=>{
       const id=String(s.id);
@@ -654,18 +715,185 @@ async function loadSiparisler(){
       seen.add(id);
       return true;
     });
-    siparisler=panelSiparisTum.filter(s=>!gizli.includes(String(s.durum||'').toUpperCase().trim()));
-    simteksIds=new Set(siparisler.map(s=>String(s.id)));
+
+    siparisler=panelSiparisTum.filter(s=>siparisAktifMi(s));
+    simteksIds=new Set(panelSiparisTum.map(s=>String(s.id)));
     window._girisListesi=[...siparisler];
+
     devamdaIds=new Set();
-    const ids=siparisler.map(s=>s.id).filter(Boolean).slice(0,200);
-    if(ids.length){
-      const akisRes=await sb.from('siparis_akis').select('siparis_id').eq('islem','KD_KONFEKSIYON').in('siparis_id',ids);
-      if(!akisRes.error)(akisRes.data||[]).forEach(r=>devamdaIds.add(String(r.siparis_id)));
-    }
+    dokumaIds=new Set();
+    konfVeriIds=new Set();
+    const ids=panelSiparisTum.map(s=>s.id).filter(Boolean);
+    await loadSiparisVeriBayraklari(ids);
+
+    hesaplaSiparisOzet();
+    renderSiparisOzet();
     renderSiparisler();
     populateSelects();
-  }catch(e){document.getElementById('siparis-liste-card').innerHTML=`<div class="empty"><div class="icon">⚠️</div>Yüklenemedi: ${e.message}</div>`;}
+  }catch(e){
+    document.getElementById('siparis-liste-card').innerHTML=`<div class="empty"><div class="icon">⚠️</div>Yüklenemedi: ${e.message}</div>`;
+    const ozetEl=document.getElementById('siparis-ozet');
+    if(ozetEl)ozetEl.innerHTML=`<div class="empty" style="grid-column:1/-1;padding:16px">Özet yüklenemedi</div>`;
+  }
+}
+
+function siparisDurumNormPanel(dbDurum){
+  let d=String(dbDurum||'BEKLEMEDE').trim().toUpperCase().replace(/İ/g,'I').replace(/ı/g,'I');
+  const raw=String(dbDurum||'BEKLEMEDE').trim();
+  if(raw==='ÜRETİMDE'||d==='URETIMDE')return 'ÜRETİMDE';
+  if(raw==='İPTAL'||d==='IPTAL')return 'İPTAL';
+  if(d==='DEVAM EDIYOR'||d==='DEVAM_EDIYOR'||d==='DEVAM')return 'ÜRETİMDE';
+  if(d==='KONFEKSIYON'||d==='KONF')return 'KONFEKSIYON';
+  if(d==='TERBIYE'||d==='BOYAHANE')return 'TERBIYE';
+  if(d==='SEVK'||d==='SEVKIYAT'||d==='SEVK_HAZIR')return 'SEVK';
+  if(d==='PLANDA'||d==='PLAN')return 'PLANDA';
+  if(d==='DOKUMA')return 'DOKUMA';
+  if(d==='BEKLEMEDE')return 'BEKLEMEDE';
+  if(d==='TAMAMLANDI')return 'TAMAMLANDI';
+  return raw||'BEKLEMEDE';
+}
+
+function siparisAktifMi(s){
+  const d=siparisDurumNormPanel(s.durum);
+  return d!=='TAMAMLANDI'&&d!=='İPTAL';
+}
+
+function siparisUretimdeMi(s){
+  const d=siparisDurumNormPanel(s.durum);
+  return ['ÜRETİMDE','KONFEKSIYON','SEVK','TERBIYE'].includes(d);
+}
+
+function siparisGelecekMi(s){
+  if(!siparisAktifMi(s))return false;
+  const d=siparisDurumNormPanel(s.durum);
+  return ['BEKLEMEDE','PLANDA','DOKUMA'].includes(d)||!d;
+}
+
+function siparisSadeceDokumaMi(s){
+  const id=String(s.id);
+  if(!siparisAktifMi(s))return false;
+  if(konfVeriIds.has(id)||devamdaIds.has(id))return false;
+  return dokumaIds.has(id)||siparisDurumNormPanel(s.durum)==='DOKUMA';
+}
+
+function siparisVeriGirildiMi(s){
+  const id=String(s.id);
+  return konfVeriIds.has(id)||devamdaIds.has(id);
+}
+
+/** KD_DOKUMA / KD_KONFEKSIYON + konf hareket bayrakları (toplu) */
+async function loadSiparisVeriBayraklari(ids){
+  devamdaIds=new Set();
+  dokumaIds=new Set();
+  konfVeriIds=new Set();
+  const list=(ids||[]).filter(Boolean);
+  if(!list.length)return;
+  for(let i=0;i<list.length;i+=120){
+    const chunk=list.slice(i,i+120);
+    const{data,error}=await sb.from('siparis_akis')
+      .select('siparis_id,islem,miktar,notlar')
+      .in('siparis_id',chunk)
+      .in('islem',[
+        'KD_KONFEKSIYON','KD_DOKUMA',
+        'KESIM','DIKIM','YIKAMA_SEVK','YIKAMA_GELEN','KK_GECEN','KALITE','KOLI','KONF_SEVK','SEVK','KUMAS_GELIS'
+      ]);
+    if(error)continue;
+    (data||[]).forEach(r=>{
+      const sid=String(r.siparis_id);
+      const iso=String(r.islem||'').toUpperCase().replace(/İ/g,'I');
+      if(iso==='KD_DOKUMA'){
+        dokumaIds.add(sid);
+        return;
+      }
+      if(iso==='KD_KONFEKSIYON'){
+        devamdaIds.add(sid);
+        let j={};
+        try{j=JSON.parse(r.notlar||'{}')||{};}catch{j={};}
+        const top=(parseInt(j.kesim_toplam||0)||0)+(parseInt(j.dikim_toplam||0)||0)
+          +(parseInt(j.kk_gecen||0)||0)+(parseInt(j.koli_toplam||0)||0)
+          +(parseInt(j.panel_sevk_toplam||0)||0)+(parseInt(j.panel_yikama_sevk||0)||0);
+        if(top>0)konfVeriIds.add(sid);
+        Object.keys(j).forEach(k=>{
+          if(!k.startsWith('kalem_'))return;
+          const row=j[k]||{};
+          if((parseInt(row.kesilen||0)||0)>0||(parseInt(row.dikilen||0)||0)>0
+            ||(parseInt(row.kk_gecen||0)||0)>0||(parseInt(row.kolide||0)||0)>0
+            ||(parseInt(row.sevk_edilen||row.sevk_adet||0)||0)>0){
+            konfVeriIds.add(sid);
+          }
+        });
+        return;
+      }
+      if(iso==='KUMAS_GELIS'){
+        dokumaIds.add(sid); /* depo sevk = dokuma tarafı ilerlemiş */
+        return;
+      }
+      const mik=parseFloat(r.miktar)||0;
+      if(mik>0){
+        konfVeriIds.add(sid);
+        devamdaIds.add(sid);
+      }
+    });
+  }
+}
+
+function hesaplaSiparisOzet(){
+  const tum=panelSiparisTum||[];
+  const aktifListe=tum.filter(siparisAktifMi);
+  siparisOzetSayac={
+    TOPLAM:aktifListe.length,
+    AKTIF:aktifListe.length,
+    URETIMDE:aktifListe.filter(siparisUretimdeMi).length,
+    VERI:aktifListe.filter(siparisVeriGirildiMi).length,
+    DOKUMA:aktifListe.filter(siparisSadeceDokumaMi).length,
+    GELECEK:aktifListe.filter(siparisGelecekMi).length
+  };
+}
+
+function renderSiparisOzet(){
+  const el=document.getElementById('siparis-ozet');
+  if(!el)return;
+  const s=siparisOzetSayac||{};
+  const kartlar=[
+    {f:'TOPLAM',val:s.TOPLAM||0,lbl:'Toplam Simteks',hint:'Açık konfeksiyon siparişleri',renk:'#a5b4fc'},
+    {f:'URETIMDE',val:s.URETIMDE||0,lbl:'Üretimde',hint:'Üretim · konf · sevk',renk:'#c084fc'},
+    {f:'VERI',val:s.VERI||0,lbl:'Veri girilen',hint:'Konfeksiyon kaydı var',renk:'#38bdf8'},
+    {f:'DOKUMA',val:s.DOKUMA||0,lbl:'Sadece dokuma',hint:'Konf henüz yok',renk:'#22d3ee'},
+    {f:'GELECEK',val:s.GELECEK||0,lbl:'Bekleyen / gelecek',hint:'Planda · bekliyor · dokuma',renk:'#fbbf24'}
+  ];
+  el.innerHTML=kartlar.map(k=>`
+    <button type="button" class="sip-ozet-kart${aktifFilter===k.f?' is-active':''}" onclick="kpiFiltrele('${k.f}')">
+      <div class="oz-val" style="color:${k.renk}">${k.val}</div>
+      <div class="oz-lbl">${k.lbl}</div>
+      <div class="oz-hint">${k.hint}</div>
+    </button>`).join('');
+}
+
+function siparisFiltreUygula(liste,filtre){
+  const f=filtre||'AKTIF';
+  /* Kapatılanlar özet/listede gösterilmez */
+  const acik=liste.filter(siparisAktifMi);
+  if(f==='TOPLAM'||f==='HEPSI'||f==='AKTIF')return acik;
+  if(f==='URETIMDE')return acik.filter(siparisUretimdeMi);
+  if(f==='VERI'||f==='DEVAMDA')return acik.filter(siparisVeriGirildiMi);
+  if(f==='DOKUMA')return acik.filter(siparisSadeceDokumaMi);
+  if(f==='GELECEK'||f==='BEKLEMEDE')return acik.filter(siparisGelecekMi);
+  if(f==='TAMAMLANDI')return acik; /* kart kaldırıldı — aktiflere düş */
+  return acik;
+}
+
+function siparisFiltreBaslik(f){
+  return ({
+    TOPLAM:'Toplam Simteks konfeksiyon',
+    HEPSI:'Toplam Simteks konfeksiyon',
+    AKTIF:'Aktif siparişler',
+    URETIMDE:'Üretimdeki siparişler',
+    VERI:'Veri girilen siparişler',
+    DEVAMDA:'Veri girilen siparişler',
+    DOKUMA:'Sadece dokuma verisi girilmiş',
+    GELECEK:'Bekleyen / gelecek siparişler',
+    BEKLEMEDE:'Bekleyen / gelecek siparişler'
+  })[f]||'Siparişler';
 }
 
 
@@ -688,17 +916,34 @@ function siparisAramaFiltrele(){
 }
 
 function kpiFiltrele(f){
-  aktifFilter=f;
+  aktifFilter=f||'TOPLAM';
+  writeUiState({siparisFilter:aktifFilter});
+  renderSiparisOzet();
   renderSiparisler();
-  switchTab('siparisler',0);
+  switchTab('siparisler',1);
 }
 
-function setFilter(f,el){aktifFilter=f;document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderSiparisler();}
+function homeAccToggle(which){
+  const wrap=document.getElementById(which==='rapor'?'home-acc-rapor-wrap':'home-acc-log-wrap');
+  if(!wrap)return;
+  const open=!wrap.classList.contains('open');
+  wrap.classList.toggle('open',open);
+  writeUiState(which==='rapor'?{homeAccRapor:open}:{homeAccLog:open});
+  if(open&&which==='rapor'&&window.KonfRapor)KonfRapor.yenile(false);
+  if(open&&which==='log')logLoadAll();
+}
+
+function setFilter(f,el){
+  aktifFilter=f;
+  writeUiState({siparisFilter:aktifFilter});
+  document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));
+  if(el)el.classList.add('active');
+  renderSiparisOzet();
+  renderSiparisler();
+}
 
 function renderSiparisler(){
-  let liste=[...siparisler];
-  if(aktifFilter==='DEVAMDA')liste=liste.filter(s=>devamdaIds.has(String(s.id)));
-  else if(aktifFilter==='BEKLEMEDE')liste=liste.filter(s=>!s.durum||s.durum==='BEKLEMEDE');
+  let liste=siparisFiltreUygula([...(panelSiparisTum||[])],aktifFilter);
   const q=normText(siparisAramaTerm||document.getElementById('siparis-arama')?.value||'');
   if(q){
     const kelimeler=q.split(/\s+/).filter(Boolean);
@@ -709,12 +954,10 @@ function renderSiparisler(){
   }
   liste.sort((a,b)=>compareSno(a.sno,b.sno));
   if(!liste.length){
-    document.getElementById('siparis-liste-card').innerHTML=`<div class="empty"><div class="icon">📭</div>${q?'Filtreye uygun sipariş yok':'Sipariş bulunamadı'}</div>`;
+    document.getElementById('siparis-liste-card').innerHTML=`<div class="empty"><div class="icon">📭</div>${q?'Filtreye uygun sipariş yok':siparisFiltreBaslik(aktifFilter)+' bulunamadı'}</div>`;
     return;
   }
-  const baslik=q
-    ?`Arama sonucu`
-    :(aktifFilter==='DEVAMDA'?'Devam Eden Siparişler':aktifFilter==='BEKLEMEDE'?'Bekleyen Siparişler':'Tüm Siparişler');
+  const baslik=q?`Arama · ${siparisFiltreBaslik(aktifFilter)}`:siparisFiltreBaslik(aktifFilter);
   let html=`<div class="card-head"><div class="card-dot" style="background:var(--accent)"></div><div class="card-title">${baslik}</div><div class="card-count">${liste.length} sipariş</div></div>`;
   liste.forEach(s=>{html+=sipItem(s);});
   document.getElementById('siparis-liste-card').innerHTML=html;
@@ -767,14 +1010,17 @@ function sipItem(s){
   const k=parseKalemler(s);
   const adet=parseInt(s.miktar)||k.reduce((a,x)=>a+(parseInt(x.miktar)||0),0);
   const ozet=siparisKalemOzeti(s);
-  const sTg='';
+  const rozetler=[];
+  if(siparisVeriGirildiMi(s))rozetler.push('<span class="tag" style="background:rgba(56,189,248,.15);color:#38bdf8;border:1px solid rgba(56,189,248,.35)">Veri</span>');
+  else if(siparisSadeceDokumaMi(s))rozetler.push('<span class="tag" style="background:rgba(34,211,238,.12);color:#22d3ee;border:1px solid rgba(34,211,238,.3)">Dokuma</span>');
+  if(siparisGelecekMi(s))rozetler.push('<span class="tag tag-amber">Bekliyor</span>');
   return `<div class="siparis-item" onclick="openSiparis(${JSON.stringify(s.id)})">
     <div class="siparis-dot" style="background:${dColor(s.durum)}"></div>
     <div class="siparis-info">
       <div class="siparis-no">${esc(s.sno||'—')}</div>
       <div class="siparis-firma">${esc(s.firma||'—')}</div>
       ${ozet!=='—'?`<div style="font-size:10px;color:var(--text3);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${esc(ozet)}</div>`:''}
-      <div class="siparis-tags">${dTag(s.durum)}${s.ttarih?`<span class="tag tag-gray">T:${s.ttarih}</span>`:''}</div>
+      <div class="siparis-tags">${dTag(s.durum)}${rozetler.join('')}${s.ttarih?`<span class="tag tag-gray">T:${esc(s.ttarih)}</span>`:''}</div>
     </div>
     <div class="siparis-right"><div class="siparis-adet">${adet||'—'}</div><div class="siparis-adet-label">${esc(siparisVeKalemlerOrtakBirim(s,k)||'adet')}</div></div>
   </div>`;
@@ -787,7 +1033,7 @@ function girisSiparisAc(id,asama){
   girisGirisModu='manuel';
   girisAktifAsama=(asama && PANEL_KONF_ASAMALAR.includes(asama))?asama:'kesim';
   writeUiState({girisAsama:girisAktifAsama,girisSiparisId:String(id),girisGirisModu:'manuel',girisKaynak:'siparis'});
-  switchTab('giris',1);
+  switchTab('giris',2);
   const sel=document.getElementById('giris-siparis-sel');
   if(sel){
     if(![...sel.options].some(o=>String(o.value)===String(id))){
@@ -1665,6 +1911,39 @@ function logFiltreUygula(){
   return data;
 }
 
+/** Manuel / panel kayıt revize-silince KD_KONFEKSIYON'u da güncelle (ana ERP toplamı doğru kalsın) */
+async function logKdMiktarDuzelt(orig,delta){
+  if(!orig||!delta)return;
+  const j=logParseNot(orig);
+  const siparisId=orig.siparis_id;
+  if(!siparisId)return;
+  let ki=parseInt(j.kalem_idx,10);
+  if(!Number.isFinite(ki)||ki<0)return;
+  const iso=String(orig.islem||'').toUpperCase().replace(/İ/g,'I');
+  let kd=await getKd(siparisId,'KD_KONFEKSIYON',true)||{};
+  if(!kd['kalem_'+ki])kd['kalem_'+ki]={};
+  const row=kd['kalem_'+ki];
+  const setMax0=(alan,v)=>{row[alan]=Math.max(0,v);};
+  if(iso==='KESIM')setMax0('kesilen',(parseInt(row.kesilen||0)||0)+delta);
+  else if(iso==='DIKIM')setMax0('dikilen',(parseInt(row.dikilen||0)||0)+delta);
+  else if(iso==='YIKAMA_SEVK'||iso==='YIKAMA')setMax0('yikama_sevk',(parseInt(row.yikama_sevk||0)||0)+delta);
+  else if(iso==='YIKAMA_GELEN')setMax0('yikama_gelen',(parseInt(row.yikama_gelen||0)||0)+delta);
+  else if(iso==='KK_GECEN'||iso==='KALITE')setMax0('kk_gecen',(parseInt(row.kk_gecen||0)||0)+delta);
+  else if(iso==='KOLI')setMax0('kolide',(parseInt(row.kolide||0)||0)+delta);
+  else if(iso==='KONF_SEVK'||iso==='SEVK'){
+    const once=Math.max(parseInt(row.sevk_edilen||0)||0,parseInt(row.sevk_adet||0)||0);
+    const sev=Math.max(0,once+delta);
+    row.sevk_edilen=sev;row.sevk_adet=sev;
+  }else return;
+  const sip=(panelSiparisTum.length?panelSiparisTum:siparisler).find(s=>String(s.id)===String(siparisId));
+  const kalemler=sip?parseKalemler(sip):[];
+  kd=syncKdKonfTotals(kd,kalemler);
+  await sbKdSet(siparisId,'KD_KONFEKSIYON',kd);
+  if(window.KonfPipeline&&typeof KonfPipeline.siparisDurumSenkron==='function'){
+    try{await KonfPipeline.siparisDurumSenkron(siparisId);}catch{}
+  }
+}
+
 /** Pipeline ana satırındaki adedi delta kadar düzelt */
 async function logPipelineMiktarDuzelt(j,islem,delta,siparisId){
   const gelisId=j?.kumas_gelis_id;
@@ -1741,9 +2020,9 @@ function renderLogFiltreli(){
         <label class="field-label">Revize notu (zorunlu değil)</label>
         <textarea class="field-textarea" id="log-rev-not" placeholder="Neden düzeltildi?">${esc(j.revize_notu||j.note||'')}</textarea>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
-          <button type="button" onclick="logRevizeKaydet(${JSON.stringify(String(r.id))})"
+          <button type="button" data-log-id="${esc(String(r.id))}" onclick="logRevizeKaydet(this.getAttribute('data-log-id'))"
             style="background:var(--accent);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:800;padding:12px;cursor:pointer">💾 Kaydet</button>
-          <button type="button" onclick="logSilKaydet(${JSON.stringify(String(r.id))})"
+          <button type="button" data-log-id="${esc(String(r.id))}" onclick="logSilKaydet(this.getAttribute('data-log-id'))"
             style="background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);border-radius:9px;color:#ef4444;font-size:12px;font-weight:800;padding:12px;cursor:pointer">🗑️ Sil</button>
         </div>
         <div style="font-size:9px;color:var(--text3);margin-top:8px">Silme kaydı tutulur · kim / ne zaman / eski miktar görünür</div>
@@ -1764,7 +2043,7 @@ function renderLogFiltreli(){
       :(revizeEdildi?'<span style="color:var(--amber);font-weight:700">🔄 Revize edildi</span>':'')
         +(logPanelKaydiMi(r)&&!denetim?'<span style="color:var(--accent2);font-weight:600">Panel</span>':'');
 
-    html+=`<div onclick="${duzenlenebilir?`logDuzenleAc(${JSON.stringify(String(r.id))})`:''}" style="background:var(--surface);border:1px solid var(--border);border-left:3px solid ${silindi?'#ef4444':meta.renk};border-radius:10px;padding:9px 12px;margin-bottom:5px;cursor:${duzenlenebilir?'pointer':'default'};${silindi?'opacity:.7':''}">
+    html+=`<div class="log-kalem-card" ${duzenlenebilir?`data-log-id="${esc(String(r.id))}"`:''} style="background:var(--surface);border:1px solid var(--border);border-left:3px solid ${silindi?'#ef4444':meta.renk};border-radius:10px;padding:9px 12px;margin-bottom:5px;cursor:${duzenlenebilir?'pointer':'default'};${silindi?'opacity:.7':''}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
         <div style="flex:1;min-width:0">
           <div style="font-size:11px;line-height:1.7;flex-wrap:wrap;display:flex;gap:2px;align-items:center">${bilgiler}</div>
@@ -1776,18 +2055,42 @@ function renderLogFiltreli(){
           ${j.aciklama||j.revize_notu||j.silme_nedeni?`<div style="font-size:10px;color:var(--text3);margin-top:5px">${esc(j.aciklama||j.revize_notu||j.silme_nedeni)}</div>`:''}
           ${denetim&&j.eski_miktar!=null?`<div style="font-size:10px;color:var(--text3);margin-top:3px">Eski: <b>${esc(j.eski_miktar)}</b> → Yeni: <b>${esc(j.yeni_miktar??r.miktar)}</b></div>`:''}
         </div>
-        ${duzenlenebilir?`<span style="flex-shrink:0;font-size:10px;color:var(--text3);padding:5px 6px">✏️</span>`:''}
+        ${duzenlenebilir?`<button type="button" class="log-duzenle-btn" data-log-id="${esc(String(r.id))}" title="Düzenle / revize"
+          style="flex-shrink:0;width:36px;height:36px;border-radius:9px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:14px;cursor:pointer;padding:0">✏️</button>`:''}
       </div>
     </div>`;
   });
 
   area.innerHTML=html||`<div class="empty"><div class="icon">📭</div>Kayıt yok</div>`;
   if(more)more.style.display=filtered.length>logGosterilen?'block':'none';
+  logBindDuzenleClick();
+}
+
+function logBindDuzenleClick(){
+  const area=document.getElementById('log-area');
+  if(!area||area._logClickBound)return;
+  area._logClickBound=true;
+  area.addEventListener('click',(ev)=>{
+    const btn=ev.target?.closest?.('.log-duzenle-btn, .log-kalem-card');
+    if(!btn)return;
+    const id=btn.getAttribute('data-log-id');
+    if(!id)return;
+    const row=logTumData.find(r=>String(r.id)===String(id));
+    if(!row){showToast('Kayıt bulunamadı',1800);return;}
+    if(logDenetimMi(row)){showToast('Denetim kaydı düzenlenemez',1800);return;}
+    if(logSilindiMi(row)){showToast('Silinmiş kayıt düzenlenemez',1800);return;}
+    ev.preventDefault();
+    logDuzenleAc(id);
+  });
 }
 
 function logDuzenleAc(id){
-  logDuzenleId=id;
+  logDuzenleId=String(id||'');
   renderLogFiltreli();
+  setTimeout(()=>{
+    const el=document.getElementById('log-rev-miktar');
+    if(el){el.focus();el.select?.();}
+  },50);
 }
 
 function logDuzenleIptal(){
@@ -1849,6 +2152,7 @@ async function logRevizeKaydet(origId){
     });
 
     await logPipelineMiktarDuzelt(j,orig.islem,miktar-eskiMiktar,orig.siparis_id);
+    await logKdMiktarDuzelt(orig,miktar-eskiMiktar);
 
     logDuzenleId=null;
     showToast('✅ Revize kaydedildi · '+user);
@@ -1892,6 +2196,7 @@ async function logSilKaydet(origId){
     });
 
     await logPipelineMiktarDuzelt(j,orig.islem,-eskiMiktar,orig.siparis_id);
+    await logKdMiktarDuzelt(orig,-eskiMiktar);
 
     logDuzenleId=null;
     showToast('🗑️ Silindi · kayıt tutuldu · '+user);
@@ -2015,6 +2320,9 @@ async function girisKaydet(tip){
     });
     if(logPromises.length)await Promise.allSettled(logPromises);
     logTumData=[];
+    if(window.KonfPipeline&&typeof KonfPipeline.siparisDurumSenkron==='function'){
+      try{await KonfPipeline.siparisDurumSenkron(girisSeciliId);}catch{}
+    }
 
     const kdUa = await getKd(girisSeciliId,'KD_URUN_AGACI');
     /* Manuel kayıt sonrası aynı modda kal */
@@ -2187,9 +2495,9 @@ async function sbKdSet(id,tip,kd){
 
 function switchTab(t,idx){
   if(t==='konfeksiyon')t='giris';
-  if(t==='gecmis'||t==='geçmiş')t='log';
+  if(t==='gecmis'||t==='geçmiş'||t==='rapor'||t==='log'||t==='anasayfa')t='home';
   const oncekiAktif=aktifTabId();
-  ['giris','siparisler','rapor','log'].forEach(id=>{const el=document.getElementById('tab-'+id);if(el)el.style.display=id===t?'':'none';});
+  ['home','giris','siparisler'].forEach(id=>{const el=document.getElementById('tab-'+id);if(el)el.style.display=id===t?'':'none';});
   const activeIdx=typeof idx==='number'?idx:tabToIdx(t);
   document.querySelectorAll('#main-tab-bar .bottom-nav-btn').forEach((b,i)=>b.classList.toggle('active',i===activeIdx));
   writeUiState({activeTab:t});
@@ -2205,10 +2513,12 @@ function switchTab(t,idx){
       writeUiState({girisKaynak:'sekme',girisGirisModu:'pipeline',girisSiparisId:null,girisAsama:null});
     }
     renderGirisAsamaTabs(kdCache['KD_URUN_AGACI_'+(girisSeciliId||'')]||{});
-  }else if(t==='rapor'){
-    if(window.KonfRapor) KonfRapor.yenile(oncekiAktif!=='rapor');
-  }else if(t==='log'){
+  }else if(t==='home'){
+    renderSiparisOzet();
+    if(window.KonfRapor) KonfRapor.yenile(oncekiAktif!=='home');
     logLoadAll();
+  }else if(t==='siparisler'){
+    renderSiparisler();
   }
 }
 
@@ -2217,9 +2527,8 @@ function girisAsamaOnceSiparis(asama){
 }
 
 function aktifTabId(){
+  if(document.getElementById('tab-home')?.style.display!=='none')return 'home';
   if(document.getElementById('tab-siparisler')?.style.display!=='none')return 'siparisler';
-  if(document.getElementById('tab-rapor')?.style.display!=='none')return 'rapor';
-  if(document.getElementById('tab-log')?.style.display!=='none')return 'log';
   return 'giris';
 }
 
@@ -2228,7 +2537,7 @@ function girdiKlavyesiKullanimda(){
   if(!a||typeof a.closest!=='function')return false;
   const t=String(a.tagName||'').toUpperCase();
   if(t!=='INPUT'&&t!=='TEXTAREA')return false;
-  return !!(a.closest('#tab-giris')||a.closest('#tab-log')||a.closest('#tab-rapor'));
+  return !!(a.closest('#tab-giris')||a.closest('#tab-home'));
 }
 
 async function refreshCurrentView(){
@@ -2237,16 +2546,16 @@ async function refreshCurrentView(){
   try{
     if(girdiKlavyesiKullanimda())return;
     const tab=aktifTabId();
-    if(tab==='siparisler'){
+    if(tab==='home'){
+      await loadSiparisler();
+      if(window.KonfRapor)await KonfRapor.yenile(false);
+      await logLoadAll();
+    }else if(tab==='siparisler'){
       await loadSiparisler();
     }else if(tab==='giris'){
       if(girisSeciliId)await girisLoadSiparis();
       else if(girisAktifAsama&&window.KonfPipeline)await KonfPipeline.yenile();
       else renderGirisAsamaTabs({});
-    }else if(tab==='rapor'&&window.KonfRapor){
-      await KonfRapor.yenile(false);
-    }else if(tab==='log'){
-      await logLoadAll();
     }
   }catch{}
   finally{syncBusy=false;}
@@ -2293,8 +2602,29 @@ function parseKalemler(s){
     return Array.isArray(p)?p:[];
   }catch{return[];}
 }
-function dTag(d){const m={'ÜRETİMDE':'tag-green','DEVAM':'tag-green','BEKLEMEDE':'tag-amber','İPTAL':'tag-red','TAMAMLANDI':'tag-gray'};return`<span class="tag ${m[String(d||'BEKLEMEDE')]||'tag-blue'}">${esc(String(d||'BEKLEMEDE'))}</span>`;}
-function dColor(d){const m={'ÜRETİMDE':'#10b981','DEVAM':'#10b981','BEKLEMEDE':'#f59e0b','İPTAL':'#ef4444'};return m[String(d||'')]||'#6366f1';}
+function dTag(d){
+  const kod=siparisDurumNormPanel(d);
+  const m={
+    'ÜRETİMDE':'tag-green','KONFEKSIYON':'tag-green','SEVK':'tag-green',
+    'DOKUMA':'tag-blue','TERBIYE':'tag-blue','PLANDA':'tag-amber','BEKLEMEDE':'tag-amber',
+    'İPTAL':'tag-red','TAMAMLANDI':'tag-gray'
+  };
+  const label={
+    'ÜRETİMDE':'Üretimde','KONFEKSIYON':'Konfeksiyon','SEVK':'Sevk',
+    'DOKUMA':'Dokuma','TERBIYE':'Terbiye','PLANDA':'Planda','BEKLEMEDE':'Beklemede',
+    'İPTAL':'İptal','TAMAMLANDI':'Tamamlandı'
+  };
+  return`<span class="tag ${m[kod]||'tag-blue'}">${esc(label[kod]||kod||'Beklemede')}</span>`;
+}
+function dColor(d){
+  const kod=siparisDurumNormPanel(d);
+  const m={
+    'ÜRETİMDE':'#10b981','KONFEKSIYON':'#ec4899','SEVK':'#34d399',
+    'DOKUMA':'#22d3ee','TERBIYE':'#38bdf8','PLANDA':'#f59e0b','BEKLEMEDE':'#f59e0b',
+    'İPTAL':'#ef4444','TAMAMLANDI':'#94a3b8'
+  };
+  return m[kod]||'#6366f1';
+}
 function bRow(lbl,val,max,color,birim){
   const pct=max>0?Math.min(100,Math.round(val/max*100)):0;
   const vHtml=birim?`${val}<span style="font-size:9px;font-weight:700;opacity:.85;margin-left:3px">${esc(birim)}</span>`:String(val);
