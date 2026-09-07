@@ -10,6 +10,8 @@
   let _kumasGelisLoadedAt = 0;
   let _kumasGelisInflight = null;
   const KUMAS_CACHE_TTL_MS = 25000;
+  /** GEÇİCİ: yıkama adedi kesimde de sayılsın — aşamalar ayrılınca kaldır */
+  const GECICI_YIKAMA_KESIM_ESLE = true;
 
   function userName() {
     const u = global.currentUser;
@@ -325,7 +327,7 @@
       }
       if (j.kumas_gelis_id) return;
       if (ki < 0) return;
-      if (islem === 'KESIM') per[ki].kesilen += mik;
+      if (islem === 'KESIM' && !j.gecici_yikama_kesim_esle) per[ki].kesilen += mik;
       else if (islem === 'DIKIM') per[ki].dikilen += mik;
       else if (islem === 'YIKAMA_SEVK' || islem === 'YIKAMA') {
         per[ki].yikSevk += mik;
@@ -343,6 +345,8 @@
       const key = 'kalem_' + i;
       if (!kd[key]) kd[key] = {};
       const p = per[i];
+      /* GEÇİCİ: yıkama sevk → kesim */
+      if (GECICI_YIKAMA_KESIM_ESLE && p.yikSevk > p.kesilen) p.kesilen = p.yikSevk;
       if (p.kesilen > 0) kd[key].kesilen = Math.max(parseInt(kd[key].kesilen || 0, 10) || 0, Math.round(p.kesilen));
       if (p.dikilen > 0) kd[key].dikilen = Math.max(parseInt(kd[key].dikilen || 0, 10) || 0, Math.round(p.dikilen));
       if (p.yikSevk > 0) kd[key].yikama_sevk = Math.max(parseInt(kd[key].yikama_sevk || 0, 10) || 0, Math.round(p.yikSevk));
@@ -624,12 +628,15 @@
     const user = userName();
     const yeniSevk = o.sevk + sevkAd;
     try {
+      const hedefKes = Math.max(parseInt(row.kesilen_adet || 0, 10) || 0, o.bek, yeniSevk);
       await kayitGuncelle(akisId, {
         yikama_sevk_adet: yeniSevk,
         yikama_sevk_ts: new Date().toISOString(),
         yikama_sevk_user: user,
         durum: o.gel >= yeniSevk && yeniSevk > 0 ? 'KALITE_BEKLIYOR' : (o.gel > 0 ? 'YIKAMA_KISMEN' : 'YIKAMA_BEKLIYOR'),
-        yikama_durum: o.gel >= yeniSevk && yeniSevk > 0 ? 'YIKAMA_TAMAM' : 'YIKAMA_KISMEN'
+        yikama_durum: o.gel >= yeniSevk && yeniSevk > 0 ? 'YIKAMA_TAMAM' : 'YIKAMA_KISMEN',
+        /* GEÇİCİ: yıkama ≡ kesim */
+        ...(GECICI_YIKAMA_KESIM_ESLE ? { kesilen_adet: hedefKes, gecici_yikama_kesim_esle: true } : {})
       });
       await sb().from('siparis_akis').insert([{
         siparis_id: coerceId(row.siparis_id),
@@ -642,6 +649,22 @@
           sevk_adet: sevkAd, toplam_sevk: yeniSevk, kaynak: 'konfeksiyon_panel'
         })
       }]);
+      if (GECICI_YIKAMA_KESIM_ESLE) {
+        await sb().from('siparis_akis').insert([{
+          siparis_id: coerceId(row.siparis_id),
+          islem: 'KESIM',
+          kalem_ad: row.stok_kodu || 'Kumaş',
+          miktar: sevkAd,
+          notlar: JSON.stringify({
+            ts: new Date().toISOString(), user,
+            note: 'GEÇİCİ: yıkama ≡ kesim · ' + sevkAd + ' ad',
+            gecici_yikama_kesim_esle: true,
+            kalem_idx: row.kalem_idx,
+            kumas_gelis_id: akisId,
+            konf_panel: true, pipeline: 'GECICI_YIKAMA_KESIM', kaynak: 'konfeksiyon_panel'
+          })
+        }]);
+      }
       await siparisDurumSenkron(row.siparis_id);
       toast(sevkAd + ' ad yıkamaya sevk edildi');
       await yenile(true);
