@@ -40,7 +40,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 #app{display:none}
 .tab-bar{display:flex;border-bottom:1px solid var(--border);background:var(--surface);overflow-x:auto;scrollbar-width:none;position:sticky;top:54px;z-index:99}
 .tab-bar::-webkit-scrollbar{display:none}
-.tab-btn{flex-shrink:0;padding:12px 16px;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--text3);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:all .2s;white-space:nowrap}
+.tab-btn{flex:1;text-align:center;padding:14px 16px;font-size:12px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--text3);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:all .2s;white-space:nowrap}
 .tab-btn.active{color:var(--accent2);border-bottom-color:var(--accent)}
 .content{padding:14px}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:10px}
@@ -160,7 +160,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 @media (max-width: 480px){
   #topbar{padding:0 10px;height:50px;gap:6px}
   .tab-bar{top:50px}
-  .tab-btn{padding:11px 12px;font-size:10px}
+  .tab-btn{padding:13px 12px;font-size:11px}
   .content{padding:10px}
   .card-head{padding:10px 11px}
   .siparis-item{padding:10px 11px;gap:8px}
@@ -194,7 +194,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 @media (min-width: 700px){
   body{max-width:none;margin:0}
   #topbar{padding:0 20px}
-  .tab-btn{padding:13px 18px;font-size:12px}
+  .tab-btn{padding:15px 18px;font-size:13px}
   .content{padding:18px}
   .login-card{max-width:520px}
 }
@@ -265,6 +265,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
     </div>
     <div id="giris-mod-yikama-area" style="display:none">
+      <button id="yf-gecmis-toggle-btn" type="button" onclick="yikamaFisGecmisToggle()" style="width:100%;margin-bottom:10px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text2);padding:10px;font-size:12px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">📋 Eski Fişler</button>
+      <div id="yf-gecmis-wrap" style="display:none;margin-bottom:10px">
+        <div class="sel-card" style="margin-bottom:0">
+          <div class="sec-title" style="margin-bottom:7px">📋 Fiş Geçmişi</div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:8px;line-height:1.4">Daha önce oluşturulan fişleri buradan tekrar PDF olarak indirebilir veya yazdırabilirsiniz.</div>
+          <div id="yf-gecmis-area"><div class="loading"><div class="spinner"></div><div>Yükleniyor…</div></div></div>
+        </div>
+      </div>
       <div class="sel-card">
         <div class="sec-title" style="margin-bottom:7px">Yıkama Sevk Fişi</div>
         <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.4">
@@ -1100,7 +1108,18 @@ async function yikamaManuelEkle(btn,siparisId,kalemIdx){
   }
 }
 
+function yikamaFisGecmisToggle(){
+  const wrap=document.getElementById('yf-gecmis-wrap');
+  const btn=document.getElementById('yf-gecmis-toggle-btn');
+  if(!wrap||!btn)return;
+  const acikOlacak=wrap.style.display==='none';
+  wrap.style.display=acikOlacak?'':'none';
+  btn.textContent=acikOlacak?'📋 Eski Fişleri Gizle':'📋 Eski Fişler';
+  if(acikOlacak)yikamaFisGecmisRender();
+}
+
 async function yikamaFisRender(){
+  if(document.getElementById('yf-gecmis-wrap')?.style.display!=='none')yikamaFisGecmisRender();
   const host=document.getElementById('yf-liste-area');
   if(!host)return;
   host.innerHTML=`<div class="loading"><div class="spinner"></div><div>Yükleniyor…</div></div>`;
@@ -1205,6 +1224,7 @@ async function yikamaFisOlustur(){
     }]);
     _sonYikamaFis={meta:{...meta},satirlar:fisSatirlar};
     await konfKyYukle(true);
+    await yikamaFisGecmisYukle(true);
     await yikamaFisRender();
     document.getElementById('yf-irsaliye').value='';
     document.getElementById('yf-not').value='';
@@ -1231,6 +1251,54 @@ function yikamaFisSonucGoster(){
       <button type="button" onclick="yikamaFisYazdir()" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text);padding:9px;font-size:11px;font-weight:800;cursor:pointer">🖨️ Yazdır</button>
     </div>`;
   host.prepend(el);
+}
+
+/* Fiş geçmişi — ana programın da okuduğu aynı YIKAMA_FIS siparis_akis kayıtları.
+   Panelde oluşan bir fiş ana programda, ana programda oluşan bir fiş panelde görünür. */
+let _yikamaFisGecmis=[];
+let _yikamaFisGecmisTs=0;
+async function yikamaFisGecmisYukle(force){
+  if(!force && _yikamaFisGecmis.length && (Date.now()-_yikamaFisGecmisTs)<30000)return _yikamaFisGecmis;
+  try{
+    const{data,error}=await sb.from('siparis_akis').select('id,created_at,kalem_ad,miktar,notlar').eq('islem','YIKAMA_FIS').order('created_at',{ascending:false}).limit(50);
+    if(error)throw error;
+    _yikamaFisGecmis=(data||[]).map(r=>{
+      let j={};try{j=JSON.parse(r.notlar||'{}');}catch(e){}
+      return{
+        id:r.id,ts:r.created_at,
+        meta:{firma:j.fis_firma||r.kalem_ad||'',irsaliye:j.fis_irsaliye||'',tarih:j.fis_tarih||'',not:j.fis_not||''},
+        satirlar:Array.isArray(j.satirlar)?j.satirlar:[],
+        toplam_ad:parseInt(j.toplam_ad||r.miktar||0,10)||0,
+        user:j.user||''
+      };
+    });
+    _yikamaFisGecmisTs=Date.now();
+  }catch(e){console.warn('yikamaFisGecmisYukle',e.message||e);}
+  return _yikamaFisGecmis;
+}
+
+async function yikamaFisGecmisRender(force){
+  const host=document.getElementById('yf-gecmis-area');
+  if(!host)return;
+  const list=await yikamaFisGecmisYukle(force);
+  if(!list.length){
+    host.innerHTML=`<div style="font-size:10px;color:var(--text3);text-align:center;padding:14px 0">Henüz fiş oluşturulmamış.</div>`;
+    return;
+  }
+  host.innerHTML=list.map((f,i)=>{
+    const tarihTr=f.meta.tarih?new Date(f.meta.tarih+'T12:00:00').toLocaleDateString('tr-TR'):(f.ts?new Date(f.ts).toLocaleDateString('tr-TR'):'—');
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:9px 11px;margin-bottom:7px">
+      <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:4px">
+        <div style="font-size:11px;font-weight:800;color:var(--text)">${esc(f.meta.irsaliye||'—')}</div>
+        <div style="font-size:9px;color:var(--text3)">${esc(tarihTr)}</div>
+      </div>
+      <div style="font-size:10px;color:var(--text2);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.meta.firma||'—')} · ${f.satirlar.length} kalem · ${f.toplam_ad.toLocaleString('tr-TR')} ad</div>
+      <div style="display:flex;gap:6px">
+        <button type="button" onclick="yikamaFisPdfIndir(_yikamaFisGecmis[${i}])" style="flex:1;background:#06b6d4;border:none;border-radius:7px;color:#fff;padding:7px;font-size:10px;font-weight:800;cursor:pointer">📄 PDF</button>
+        <button type="button" onclick="yikamaFisYazdir(_yikamaFisGecmis[${i}])" style="flex:1;background:var(--surface);border:1px solid var(--border2);border-radius:7px;color:var(--text);padding:7px;font-size:10px;font-weight:800;cursor:pointer">🖨️ Yazdır</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function konfEnsureHtml2Pdf(){
@@ -1316,9 +1384,10 @@ function konfPdfShellHtml({title,subtitle,docNo,bodyHtml,note}){
   </div>`;
 }
 
-async function yikamaFisPdfIndir(){
-  if(!_sonYikamaFis){showToast('Önce bir fiş oluşturun');return;}
-  const{meta,satirlar}=_sonYikamaFis;
+async function yikamaFisPdfIndir(fis){
+  fis=fis||_sonYikamaFis;
+  if(!fis){showToast('Önce bir fiş oluşturun');return;}
+  const{meta,satirlar}=fis;
   showToast('PDF hazırlanıyor…','info',2000);
   try{await konfEnsureHtml2Pdf();}catch(e){showToast('PDF kütüphanesi yüklenemedi');return;}
   const docNo=yikamaFisDocNo(meta,satirlar.length);
@@ -1336,9 +1405,10 @@ async function yikamaFisPdfIndir(){
   }).from(shell).save();
 }
 
-function yikamaFisYazdir(){
-  if(!_sonYikamaFis){showToast('Önce bir fiş oluşturun');return;}
-  const{meta,satirlar}=_sonYikamaFis;
+function yikamaFisYazdir(fis){
+  fis=fis||_sonYikamaFis;
+  if(!fis){showToast('Önce bir fiş oluşturun');return;}
+  const{meta,satirlar}=fis;
   const docNo=yikamaFisDocNo(meta,satirlar.length);
   const body=yikamaFisPdfBodyHtml(satirlar,meta);
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Yıkama Sevk Fişi ${esc(docNo)}</title>
