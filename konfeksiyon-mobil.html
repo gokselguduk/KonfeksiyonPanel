@@ -1627,28 +1627,18 @@ async function yikamaManuelEkle(btn,siparisId,kalemIdx){
   const kalem=parseKalemler(sip||{})[kalemIdx]||{};
   const ad=[kalem.ad||kalem.kod||"Kalem",kalem.renk,kalem.ebat||kalem.olcu].filter(Boolean).join(" · ");
 
-  /* Fişe eklenecek adet, kesim kuyruğundaki bekleyeni (kesilen - sevk) aşıyorsa
-     önce kesim kaydını tamamlar (ikiz koruması dahil — HEDEFE TAMAMLAMA),
-     sonra o kalemin kesim satırlarından adedi fişe (staging'e) dağıtır. */
+  /* Kesim ve yıkama verisi birbirinden bağımsız tutulur: yıkama fişine yalnızca
+     GERÇEKTEN kesim kaydına girilmiş (kesilen - sevk) adet kadar eklenebilir.
+     Yetersizse burada otomatik kesim kaydı OLUŞTURULMAZ — kullanıcı önce
+     Kesim girişinden (Ürün Ara → Kesim) o kalemi kesmeli. */
   const origTxt=btn?btn.textContent:"";
   if(btn){btn.disabled=true;btn.textContent="…";}
   try{
     const onde=yikamaOndeBekleyen(siparisId,kalemIdx);
     if(onde<val){
-      const eklenecek=val-onde;
-      if(onde>0){
-        if(!confirm(`${sip?.sno||siparisId} · ${ad}\n\nKesim kaydında bekleyen ${onde} ad var.\nFişe ${val} ad eklemek için ${eklenecek} ad daha kesim kaydına eklenecek.\n\nDevam edilsin mi?`)){
-          if(btn){btn.disabled=false;btn.textContent=origTxt;}
-          return;
-        }
-      }
-      const user=currentUser?.display_name||currentUser?.username||"Sistem";
-      await konfKyInsert({
-        siparis_id:siparisId,siparis_sno:sip?.sno||"",firma:sip?.firma||"",
-        kalem_idx:kalemIdx,desen:kalem.ad||kalem.kod||"",renk:kalem.renk||"",ebat:kalem.ebat||kalem.olcu||"",
-        kesilen_adet:eklenecek,rota:"YIKAMA",kaynak:"MOBIL_MANUEL_YIKAMA",kesim_user:user
-      },{ikizKontrolKapali:onde>0});
-      await konfKyYukle(true);
+      showToast(`⚠ Kesim kaydında bekleyen sadece ${onde} ad var. Önce Kesim girişinden ekleyin.`,3600);
+      if(btn){btn.disabled=false;btn.textContent=origTxt;}
+      return;
     }
 
     /* Bu kalemin YIKAMA rotalı, aktif kesim satırlarını en eskiden başlayarak
