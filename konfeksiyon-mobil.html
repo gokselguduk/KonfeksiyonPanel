@@ -1119,12 +1119,11 @@ async function veriGirisiFisKaydet(btn,i){
         continue;
       }
       let kesimsizKalem=Number.isFinite(parseInt(s.kalem_idx,10))?parseInt(s.kalem_idx,10):null;
-      let kesimsizVardi=false;
       for(const d of cozulenKy){
         const{data:rows}=await sb.from(KONF_KY_TABLO).select('yikama_sevk_adet,kesilen_adet,kaynak,kalem_idx').eq('id',d.id).limit(1);
         const cur=rows?.[0];
         if(!cur)continue;
-        if(konfKyKesimsizMi(cur)){kesimsizVardi=true;if(kesimsizKalem==null)kesimsizKalem=parseInt(cur.kalem_idx,10);}
+        if(konfKyKesimsizMi(cur)&&kesimsizKalem==null)kesimsizKalem=parseInt(cur.kalem_idx,10);
         const yeniSevk=Math.max(0,(parseInt(cur.yikama_sevk_adet||0,10)||0)-(parseInt(d.pay||0,10)||0));
         const kes=parseInt(cur.kesilen_adet||0,10)||0;
         await konfKyUpdate(d.id,{yikama_sevk_adet:yeniSevk,durum:yeniSevk<=0?'YIKAMA_BEKLIYOR':(yeniSevk>=kes?'YIKAMADA':'YIKAMA_KISMEN')});
@@ -1136,11 +1135,10 @@ async function veriGirisiFisKaydet(btn,i){
       let uygulanacak=Math.min(istenenAdet,maxKalan);
       const eksik=istenenAdet-uygulanacak;
       let kesimsizPay=0;
-      if(eksik>0 && Number.isFinite(kesimsizKalem)
-        && (kesimsizVardi || confirm(yikamaKesimsizOnayMesaj([s.siparis_sno,s.desen,s.renk,s.ebat].filter(Boolean).join(' · '),maxKalan,istenenAdet,eksik)))){
-        kesimsizPay=eksik;
+      if(eksik>0 && Number.isFinite(kesimsizKalem)){
+        kesimsizPay=eksik; // kesim kaydı yok/yetersiz — engelsiz, kesimsiz yıkama payı olarak eklenir
       }else if(eksik>0){
-        showToast(`${esc(s.siparis_sno||'')}: en fazla ${maxKalan} adet uygulanabildi`,3500);
+        showToast(`${esc(s.siparis_sno||'')}: en fazla ${maxKalan} adet uygulanabildi (ürün belirsiz — kesimsiz yazılamadı)`,3500);
       }
       const yeniKy=[];
       let kalanEkle=uygulanacak;
@@ -1288,11 +1286,6 @@ async function yikamaKesimsizSatirAl(bilgi,user){
   },{ikizKontrolKapali:true});
   if(!row)throw new Error('Kesimsiz yıkama satırı açılamadı');
   return row;
-}
-function yikamaKesimsizOnayMesaj(ad,kesimli,istenen,eksik){
-  return `${ad}\n\nKesim kaydında yıkamaya bekleyen: ${kesimli} ad\nGirilen: ${istenen} ad\n\n`
-    +`${eksik} ad için kesim girilmemiş.\nBu ${eksik} ad KESİMSİZ YIKAMA olarak fişe eklensin mi?\n\n`
-    +`(Kesim sayısına eklenmez; kesim sonradan ayrıca girilebilir.)`;
 }
 function konfKyKalemRows(siparisId,kalemIdx){
   return (_konfKyCache.rows||[]).filter(r=>String(r.siparis_id)===String(siparisId)&&Number(r.kalem_idx)===Number(kalemIdx));
@@ -1713,7 +1706,7 @@ function yikamaManuelRender(){
       <div style="flex:1;min-width:0">
         <div style="font-size:10px;font-weight:800;color:var(--text)">${esc(sip.sno)} <span style="font-weight:500;color:var(--text3)">· ${esc(sip.firma||'')}</span></div>
         <div style="font-size:10px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(etiket)}</div>
-        ${onde>0?`<div style="font-size:9px;font-weight:800;color:#f59e0b;margin-top:2px">⚠ Yıkama önünde zaten ${onde} ad var — yazdığınız sayı TOPLAM olarak kabul edilir</div>`:`<div style="font-size:9px;color:var(--text3);margin-top:2px">Kesim girilmemiş — eklerseniz kesimsiz yıkama olarak onay istenir</div>`}
+        ${onde>0?`<div style="font-size:9px;font-weight:800;color:#f59e0b;margin-top:2px">⚠ Yıkama önünde zaten ${onde} ad var — yazdığınız sayı TOPLAM olarak kabul edilir</div>`:`<div style="font-size:9px;color:var(--text3);margin-top:2px">Kesim girilmemiş — eklenirse kesimsiz yıkama olarak işlenir</div>`}
       </div>
       <input id="yfm-ad-${rid}" type="text" inputmode="decimal" enterkeyhint="done" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="adet"
         style="width:70px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);padding:6px;font-size:15px;font-weight:700;text-align:center;outline:none">
@@ -1731,9 +1724,10 @@ async function yikamaManuelEkle(btn,siparisId,kalemIdx){
   const ad=[kalem.ad||kalem.kod||"Kalem",kalem.renk,kalem.ebat||kalem.olcu].filter(Boolean).join(" · ");
 
   /* Kesim ve yıkama verisi birbirinden bağımsız tutulur: önce gerçekten kesim
-     kaydına girilmiş (kesilen - sevk) adet kullanılır. Yetmeyen kısım için
-     otomatik kesim kaydı OLUŞTURULMAZ — kullanıcı onaylarsa KESİMSİZ YIKAMA
-     payı olarak fişe eklenir (kesilen_adet=0, kesim sayısına girmez). */
+     kaydına girilmiş (kesilen - sevk) adet kullanılır. Yetmeyen/hiç kesim
+     kaydı olmayan kısım hiçbir engele takılmadan KESİMSİZ YIKAMA payı olarak
+     fişe eklenir (kesilen_adet=0, kesim sayısına girmez — sonradan ayrıca
+     kesim girilebilir). */
   const origTxt=btn?btn.textContent:"";
   if(btn){btn.disabled=true;btn.textContent="…";}
   try{
@@ -1761,13 +1755,11 @@ async function yikamaManuelEkle(btn,siparisId,kalemIdx){
       yeniParcalar.push({id:r.id,pay});
       kalanDagit-=pay;
     }
-    if(kalanDagit>0){
-      const kesimli=val-kalanDagit;
-      if(!confirm(yikamaKesimsizOnayMesaj(ad,kesimli,val,kalanDagit))){
-        if(btn){btn.disabled=false;btn.textContent=origTxt;}
-        return;
-      }
-      yeniParcalar.push({id:null,pay:kalanDagit,kesimsiz:true});
+    // Kesim kaydı yok/yetersiz — engelsiz: kalan pay kesimsiz yıkama olarak eklenir
+    // (kesilen_adet=0, kesim sayısına girmez; bkz. yikamaKesimsizSatirAl).
+    const kesimsizKalanDagit=kalanDagit;
+    if(kesimsizKalanDagit>0){
+      yeniParcalar.push({id:null,pay:kesimsizKalanDagit,kesimsiz:true});
     }
 
     if(!satir){
@@ -1782,7 +1774,9 @@ async function yikamaManuelEkle(btn,siparisId,kalemIdx){
     });
     satir.adetTop+=val;
 
-    showToast(`✅ ${val} ad fişe eklendi — ${sip?.sno||siparisId}`,2600);
+    showToast(kesimsizKalanDagit>0
+      ? `✅ ${val} ad fişe eklendi — ${sip?.sno||siparisId} (${kesimsizKalanDagit} ad kesim kaydı olmadan, kesimsiz yıkama)`
+      : `✅ ${val} ad fişe eklendi — ${sip?.sno||siparisId}`,3200);
     document.getElementById("yf-manuel-arama").value="";
     document.getElementById("yf-manuel-sonuc").innerHTML="";
     yikamaFisSatirlariRender();
