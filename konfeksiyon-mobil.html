@@ -593,6 +593,30 @@ function kalemBirimEtiket(k){
   if(raw.length<=12)return raw;
   return'adet';
 }
+
+/* Sipariş aşımı UYARISI — ENGEL DEĞİL (kullanıcı kararı, 19.09.2026): desen/renk
+   karışıklığıyla yanlış kaleme yazılabiliyor ya da müşteri siparişi artırmış ama
+   sisteme işlenmemiş olabiliyor. Kullanıcı onaylarsa giriş yapılır.
+   satirlar: [{sno, kalem, asama, onceki, eklenen}] — onceki = bu girişten önceki toplam. */
+function siparisAsimKontrol(satirlar){
+  const asan=(satirlar||[]).filter(s=>{
+    const sip=parseInt(s.kalem?.miktar||0,10)||0;
+    const b=kalemBirimEtiket(s.kalem);
+    if(!sip||b==='m'||b==='kg')return false;
+    return s.eklenen>0&&(s.onceki+s.eklenen)>sip;
+  });
+  if(!asan.length)return true;
+  const fmt=n=>(parseInt(n,10)||0).toLocaleString('tr-TR');
+  const liste=asan.slice(0,8).map(s=>{
+    const k=s.kalem||{};
+    const ad=[k.ad||k.kod||'Kalem',k.renk,k.ebat||k.olcu].filter(Boolean).join(' · ');
+    const sip=parseInt(k.miktar||0,10)||0;
+    const top=s.onceki+s.eklenen;
+    return `• ${s.sno||''} ${ad} — ${s.asama}\n   Sipariş ${fmt(sip)} · şimdiye kadar ${fmt(s.onceki)} · +${fmt(s.eklenen)} → ${fmt(top)} (${fmt(top-sip)} fazla)`;
+  }).join('\n')+(asan.length>8?`\n… ve ${asan.length-8} kalem daha`:'');
+  return confirm('⚠ SİPARİŞ ADEDİ AŞILIYOR\n\n'+liste+
+    '\n\nDesen ve renk doğru mu? Müşteri siparişi artırdıysa devam edebilirsiniz.\n\nYine de kaydedilsin mi?');
+}
 /** Tüm kalemler aynı birimdeyse o birim; aksi halde null (satırda göster) */
 function kalemlerOrtakBirimEtiket(ks){
   if(!ks||!ks.length)return'adet';
@@ -786,7 +810,7 @@ async function renderModalTab(t){
       const sa=parseInt(k.miktar||0)||0;
       const dok=konfKalemDokunan(s.id,i,k);
       const kes=Math.max(konfKyKesilenToplam(s.id,i),parseInt(kk.kesilen||0)||0);
-      const yik=parseInt(kk.yikama_sevk||0)||0;
+      const yik=konfKalemYikamaSevk(s.id,i,kk);
       const kkG=parseInt(kk.kk_gecen||0)||0;
       const sevk=parseInt(kk.sevk_adet||0)||0;
       const baslik=k.ad||k.kod||('Kalem '+(i+1));
@@ -934,10 +958,10 @@ function vgKalemIdxCoz(sip,j){
 
 async function veriGirisleriYukle(){
   await konfKyYukle();
-  const kesimler=(_konfKyCache.rows||[]).filter(r=>!konfKyKesimsizMi(r)).map(r=>({
+  const kesimler=(_konfKyCache.rows||[]).filter(r=>!konfKyKesimsizMi(r)&&(parseInt(r.kesilen_adet||0,10)||0)>0).map(r=>({
     tip:'kesim',id:r.id,ts:r.kesim_ts||r.created_at,sno:r.siparis_sno,firma:r.firma,
     etiket:[r.desen,r.renk,r.ebat].filter(Boolean).join(' · '),adet:r.kesilen_adet,
-    user:r.kesim_user,siparisId:r.siparis_id,kalemIdx:r.kalem_idx
+    user:r.kesim_user,siparisId:r.siparis_id,kalemIdx:r.kalem_idx,devir:konfKyDevirMi(r)
   }));
   const diger=[];
   try{
@@ -996,11 +1020,11 @@ function veriGirisleriRenderListe(){
   host.innerHTML=_vgListe.map((e,i)=>{
     const m=VG_TIP_META[e.tip];
     const saat=e.ts?new Date(e.ts).toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
-    const gerAlMumkunMu=e.tip==='kesim'?true
+    const gerAlMumkunMu=e.tip==='kesim'?!e.devir
       :e.tip==='kalite'?(e.kalemIdx!=null && !e.iptal)
       :e.tip==='yikama_fis'?!e.iptal
       :false;
-    const duzenleMumkunMu=e.tip==='kesim'?true:e.tip==='kalite'?(e.kalemIdx!=null&&!e.iptal):(e.tip==='yikama_fis'&&!e.iptal);
+    const duzenleMumkunMu=e.tip==='kesim'?!e.devir:e.tip==='kalite'?(e.kalemIdx!=null&&!e.iptal):(e.tip==='yikama_fis'&&!e.iptal);
     const duzenleAcik=_vgDuzenleSet.has(i);
     let duzenleFormu='';
     if(duzenleAcik){
@@ -1258,8 +1282,9 @@ function siparisKalemBirim(kalem){
   return (u==='MT'||u==='KG')?u:'ADET';
 }
 function dokumaUrunIkinciOzet(u,kalem){
+  /* Sipariş birimi = girilen veri (kullanıcı, 20.09.2026): ADET m+adet, KG m+kg, MT yalnız m. */
   const b=siparisKalemBirim(kalem);
-  const tip=(b==='KG'||b==='MT')?'KG':'ADET';
+  const tip=b==='KG'?'KG':(b==='MT'?'MT':'ADET');
   let metre=parseFloat(u?.toplam_metre)||0;
   let kg=parseFloat(u?.toplam_kg)||0;
   let adet=parseInt(u?.toplam_adet,10)||0;
@@ -1271,6 +1296,7 @@ function dokumaUrunIkinciOzet(u,kalem){
     });
   }
   if(tip==='KG')return{tip:'KG',metre,ikinci:kg,kg,adet:0,etiket:'kg'};
+  if(tip==='MT')return{tip:'MT',metre,ikinci:metre,kg:0,adet:0,etiket:'m'};
   return{tip:'ADET',metre,ikinci:adet,kg:0,adet,etiket:'adet'};
 }
 function konfKalemDokunan(siparisId,kalemIdx,kalem){
@@ -1302,6 +1328,42 @@ async function konfKyYukle(force){
    satır yalnızca yıkama sevk/gelen adedini taşır. Kesim sonradan ayrıca girilebilir. */
 const KONF_KY_KESIMSIZ='KESIMSIZ_YIKAMA';
 function konfKyKesimsizMi(r){return String(r?.kaynak||'').toUpperCase()===KONF_KY_KESIMSIZ;}
+/* ESKİ KAYIT DEVRİ — kesim ve yıkamanın TEK kayıt yeri konf_kesim_yikama tablosudur
+   (kullanıcı, 20.09.2026: "çift giriş olmayacak, tek giriş; kim girdi ne zaman girdi görülecek").
+   Eski Veri Girişi kesim/yıkama adetleri yalnız KD_KONFEKSIYON'da duruyor. Ekranlar en büyüğünü
+   gösterdiği için, tablo toplamı KD'nin gerisindeyse yeni giriş toplamda GÖRÜNMEZ. Kaleme yeni
+   giriş yapılmadan hemen önce fark BİR KEZ "Devir" satırı olarak tabloya yazılır; bundan sonra
+   giriş listesi toplamla birebir tutar. Rota KALITE + durum KALITE_TAMAM: hiçbir kuyruğa girmez. */
+const KONF_KY_DEVIR='DEVIR';
+function konfKyDevirMi(r){return String(r?.kaynak||'').toUpperCase()===KONF_KY_DEVIR;}
+async function konfKyDevirGerekirse(siparisId,kalemIdx){
+  const ki=parseInt(kalemIdx,10);
+  if(!siparisId||!(ki>=0))return null;
+  const n=v=>parseInt(v||0,10)||0;
+  const kd=await getKd(siparisId,'KD_KONFEKSIYON',true);
+  const k=kd?.['kalem_'+ki]||{};
+  if(!n(k.kesilen)&&!n(k.yikama_sevk)&&!n(k.yikama_gelen))return null;
+  const{data,error}=await sb.from(KONF_KY_TABLO).select('kesilen_adet,yikama_sevk_adet,yikama_gelen_adet')
+    .eq('siparis_id',coerceSiparisIdForDb(siparisId)).eq('kalem_idx',ki).eq('aktif',true);
+  if(error)throw error;
+  const t=(data||[]).reduce((a,r)=>({kes:a.kes+n(r.kesilen_adet),sevk:a.sevk+n(r.yikama_sevk_adet),gel:a.gel+n(r.yikama_gelen_adet)}),{kes:0,sevk:0,gel:0});
+  const dKes=Math.max(0,n(k.kesilen)-t.kes),dSevk=Math.max(0,n(k.yikama_sevk)-t.sevk),dGel=Math.max(0,n(k.yikama_gelen)-t.gel);
+  if(!dKes&&!dSevk&&!dGel)return null;
+  const sip=siparisler.find(s=>String(s.id)===String(siparisId))||{};
+  const kalem=parseKalemler(sip)[ki]||{};
+  const row={
+    siparis_id:coerceSiparisIdForDb(siparisId),siparis_sno:sip.sno||'',firma:sip.firma||'',kalem_idx:ki,
+    desen:kalem.ad||kalem.kod||'',renk:kalem.renk||'',ebat:kalem.ebat||kalem.olcu||'',
+    kesilen_adet:dKes,yikama_sevk_adet:dSevk,yikama_gelen_adet:dGel,
+    rota:'KALITE',durum:'KALITE_TAMAM',kaynak:KONF_KY_DEVIR,
+    kesim_user:'Devir (eski kayıt)',kesim_ts:sip.created_at||new Date().toISOString(),aktif:true,
+    notlar:JSON.stringify({devir:{ts:new Date().toISOString(),user:currentUser?.display_name||currentUser?.username||'—',
+      kd:{kesilen:n(k.kesilen),yikama_sevk:n(k.yikama_sevk),yikama_gelen:n(k.yikama_gelen)},tablo:t}})
+  };
+  const{data:ins,error:e2}=await sb.from(KONF_KY_TABLO).insert([row]).select('*').limit(1);
+  if(e2)throw e2;
+  return ins?.[0]||null;
+}
 async function yikamaKesimsizSatirAl(bilgi,user){
   const ki=parseInt(bilgi.kalem_idx,10);
   if(!Number.isFinite(ki))throw new Error('Kesimsiz yıkama için ürün (kalem) bilinmiyor');
@@ -1324,6 +1386,12 @@ function konfKyKalemRows(siparisId,kalemIdx){
 }
 function konfKyKesilenToplam(siparisId,kalemIdx){
   return konfKyKalemRows(siparisId,kalemIdx).reduce((s,r)=>s+(parseInt(r.kesilen_adet||0,10)||0),0);
+}
+/** Yıkamaya giden — tek kural (ana program konfKalemUretimSayilari ile aynı): Veri Girişi (KD)
+    ile yıkama fişi (kesim/yıkama tablosu) en büyüğü. Fiş yalnız tabloya yazdığı için ikisi de okunur. */
+function konfKalemYikamaSevk(siparisId,kalemIdx,kdKalem){
+  const ky=konfKyKalemRows(siparisId,kalemIdx).reduce((s,r)=>s+(parseInt(r.yikama_sevk_adet||0,10)||0),0);
+  return Math.max(ky,parseInt(kdKalem?.yikama_sevk||0,10)||0);
 }
 /** Ürün ağacında bu kalem için "Parça Yıkama" aşaması işaretliyse YIKAMA, değilse KALITE (ana programla aynı mantık) */
 async function konfKyRotaBelirle(siparisId,kalemIdx){
@@ -1423,14 +1491,14 @@ async function konfYikamadanDus(siparisId,kalemIdx,adet,opts){
   let rows=[];
   try{
     const{data,error}=await sb.from(KONF_KY_TABLO)
-      .select("id,created_at,kesim_ts,kalem_idx,yikama_sevk_adet,yikama_gelen_adet,aktif,rota")
+      .select("id,created_at,kesim_ts,kalem_idx,yikama_sevk_adet,yikama_gelen_adet,aktif,rota,kaynak")
       .eq("siparis_id",siparisId).gte("created_at",bas).limit(200);
     if(error)return 0;
     rows=data||[];
   }catch(e){return 0;}
   const adaylar=rows.filter(r=>{
     if(r.aktif===false)return false;
-    if(String(r.rota||"YIKAMA").toUpperCase()!=="YIKAMA")return false;
+    if(String(r.rota||"YIKAMA").toUpperCase()!=="YIKAMA"&&!konfKyDevirMi(r))return false; // devir: eski yıkamadaki mal da kaliteyle döner
     if(Number.isFinite(ki)&&ki>=0&&Number(r.kalem_idx)!==ki)return false;
     return (parseInt(r.yikama_sevk_adet,10)||0)>(parseInt(r.yikama_gelen_adet,10)||0);
   }).sort((a,b)=>new Date(a.kesim_ts||a.created_at||0)-new Date(b.kesim_ts||b.created_at||0));
@@ -1559,6 +1627,7 @@ async function urunAraRender(){
 async function urunAraSatirKaydetKesim(btn,sip,kalemIdx,kalem,val){
   const rota=await konfKyRotaBelirle(sip.id,kalemIdx);
   const user=currentUser?.display_name||currentUser?.username||'Sistem';
+  await konfKyDevirGerekirse(sip.id,kalemIdx);
   await konfKyInsert({
     siparis_id:sip.id,siparis_sno:sip.sno||'',firma:sip.firma||'',
     kalem_idx:kalemIdx,desen:kalem.ad||kalem.kod||'',renk:kalem.renk||'',ebat:kalem.ebat||kalem.olcu||'',
@@ -1566,6 +1635,49 @@ async function urunAraSatirKaydetKesim(btn,sip,kalemIdx,kalem,val){
   });
   await konfKyYukle(true);
   return rota;
+}
+
+/* KALİTE — TEK yazma yolu (Ürün Ara ve Veri Girişi aynı fonksiyonu kullanır).
+   Sayı: KD_KONFEKSIYON kalem kk_gecen (+tamir/imha); kim/ne zaman: aynı anda yazılan tek
+   'KALİTE KONTROL' satırı (Veri Girişleri listesi ve ana program operasyon günlüğü bunu okur).
+   Kalite yapılan mal yıkamadan dönmüştür: "yıkamada olan"dan düşülür. */
+async function panelKaliteYaz(siparisId,kalemIdx,adetler,kaynak){
+  const n=v=>parseInt(v||0,10)||0;
+  const ek={kk_gecen:n(adetler?.kk),tamir:n(adetler?.tamir),imha:n(adetler?.imha)};
+  if(!ek.kk_gecen&&!ek.tamir&&!ek.imha)return 0;
+  const sip=siparisler.find(s=>String(s.id)===String(siparisId));
+  const kalemler=parseKalemler(sip||{});
+  const kalem=kalemler[kalemIdx]||{};
+  const kalemAdi=[kalem.ad||kalem.kod||'Kalem '+(kalemIdx+1),kalem.renk,kalem.ebat||kalem.olcu].filter(Boolean).join(' · ');
+  const kd=await getKd(siparisId,'KD_KONFEKSIYON',true);
+  if(!kd['kalem_'+kalemIdx])kd['kalem_'+kalemIdx]={};
+  const ki=kd['kalem_'+kalemIdx];
+  Object.keys(ek).forEach(a=>{if(ek[a])ki[a]=Math.max(0,n(ki[a])+ek[a]);});
+  let tK=0,tD=0,tKK=0,tKol=0,tH=0;
+  kalemler.forEach((_,i)=>{const x=kd['kalem_'+i]||{};
+    tK+=n(x.kesilen);tD+=n(x.dikilen);tKK+=n(x.kk_gecen);tKol+=n(x.kolide);
+    tH+=n(x.iki_kalite)+n(x.tamir)+n(x.imha);});
+  kd.kesim_toplam=tK;kd.dikim_toplam=tD;kd.kk_gecen=tKK;kd.kalite_toplam=tKK+tH;kd.koli_toplam=tKol;kd.hatali_toplam=tH;
+  await sbKdSet(siparisId,'KD_KONFEKSIYON',kd);
+
+  const etiket={kk_gecen:'Kalite geçen',tamir:'Tamir',imha:'İmha'};
+  const notlar=JSON.stringify({
+    kullanici:currentUser?.display_name||currentUser?.username||'—',
+    urun_ad:kalem.ad||kalem.kod||'',renk:kalem.renk||'',ebat:kalem.ebat||kalem.olcu||'',
+    siparis_adet:n(kalem.miktar),birim:kalemBirimEtiket(kalem),
+    kk_gecen:ek.kk_gecen,tamir:ek.tamir||undefined,imha:ek.imha||undefined,
+    detay:Object.keys(ek).filter(a=>ek[a]).map(a=>`${etiket[a]}: +${ek[a]}`),
+    kaynak:kaynak||'urun_ara',kalem_idx:kalemIdx
+  });
+  await sb.from('siparis_akis').insert([{siparis_id:coerceSiparisIdForDb(siparisId),islem:'KALİTE KONTROL',kalem_ad:kalemAdi,miktar:ek.kk_gecen,notlar}]);
+  logTumData=[];
+  let yikDus=0;
+  if(ek.kk_gecen>0){
+    try{ yikDus=await konfYikamadanDus(siparisId,kalemIdx,ek.kk_gecen,{kaynak:'PANEL_KALITE'}); }
+    catch(e){ console.warn('panel kalite -> yikamadan dusum',e); }
+    if(yikDus>0){ try{ await konfKyYukle(true); }catch(e){} }
+  }
+  return yikDus;
 }
 
 async function urunAraSatirKaydet(btn,siparisId,kalemIdx){
@@ -1581,37 +1693,26 @@ async function urunAraSatirKaydet(btn,siparisId,kalemIdx){
     const kalem=kalemler[kalemIdx]||{};
     const kalemAdi=[kalem.ad||kalem.kod||'Kalem '+(kalemIdx+1),kalem.renk,kalem.ebat||kalem.olcu].filter(Boolean).join(' · ');
 
+    {
+      /* Sipariş aşımı uyarısı — onaylanmazsa hiçbir şey yazılmaz. */
+      const n=v=>parseInt(v||0,10)||0;
+      const kdOn=await getKd(siparisId,'KD_KONFEKSIYON',true);
+      const ki=kdOn?.['kalem_'+kalemIdx]||{};
+      const onceki=asama==='kesim'
+        ? Math.max(konfKyKesilenToplam(siparisId,kalemIdx),n(ki.kesilen))
+        : n(ki.kk_gecen)+n(ki.iki_kalite)+n(ki.tamir)+n(ki.imha);
+      if(!siparisAsimKontrol([{sno:sip?.sno||'',kalem,asama:asama==='kesim'?'Kesim':'Kalite',onceki,eklenen:val}])){
+        showToast('Kayıt iptal edildi — hiçbir şey yazılmadı');
+        if(btn){btn.disabled=false;btn.textContent=origTxt;}
+        return;
+      }
+    }
+
     if(asama==='kesim'){
       const rota=await urunAraSatirKaydetKesim(btn,sip,kalemIdx,kalem,val);
       showToast(`✅ ${esc(kalemAdi)} · +${val} kesildi (${esc(sip?.sno||siparisId)})${rota==='YIKAMA'?' · Yıkamaya hazır':' · Kaliteye hazır'}`,2600);
     }else{
-      const alan='kk_gecen';
-      const kd=await getKd(siparisId,'KD_KONFEKSIYON',true);
-      if(!kd['kalem_'+kalemIdx])kd['kalem_'+kalemIdx]={};
-      kd['kalem_'+kalemIdx][alan]=Math.max(0,(parseInt(kd['kalem_'+kalemIdx][alan]||0)||0)+val);
-      let tK=0,tD=0,tKK=0,tKol=0,tH=0;
-      kalemler.forEach((_,i)=>{const ki=kd['kalem_'+i]||{};
-        tK+=parseInt(ki.kesilen||0)||0;tD+=parseInt(ki.dikilen||0)||0;
-        tKK+=parseInt(ki.kk_gecen||0)||0;tKol+=parseInt(ki.kolide||0)||0;
-        tH+=(parseInt(ki.iki_kalite||0)||0)+(parseInt(ki.tamir||0)||0)+(parseInt(ki.imha||0)||0);});
-      kd.kesim_toplam=tK;kd.dikim_toplam=tD;kd.kk_gecen=tKK;kd.kalite_toplam=tKK+tH;kd.koli_toplam=tKol;kd.hatali_toplam=tH;
-      await sbKdSet(siparisId,'KD_KONFEKSIYON',kd);
-
-      const islemAdi='KALİTE KONTROL';
-      const detayEtiket='Kalite geçen';
-      const notlar=JSON.stringify({
-        kullanici:currentUser?.display_name||currentUser?.username||'—',
-        urun_ad:kalem.ad||kalem.kod||'',renk:kalem.renk||'',ebat:kalem.ebat||kalem.olcu||'',
-        siparis_adet:parseInt(kalem.miktar||0)||0,birim:kalemBirimEtiket(kalem),
-        [alan]:val,detay:[`${detayEtiket}: +${val}`],kaynak:'urun_ara',kalem_idx:kalemIdx
-      });
-      await sb.from('siparis_akis').insert([{siparis_id:coerceSiparisIdForDb(siparisId),islem:islemAdi,kalem_ad:kalemAdi,miktar:val,notlar}]);
-      logTumData=[];
-      /* Kalite yapilan mal yikamadan donmustur: "Yikamada olan"dan dus. */
-      let yikDus=0;
-      try{ yikDus=await konfYikamadanDus(siparisId,kalemIdx,val,{kaynak:'PANEL_KALITE'}); }
-      catch(e){ console.warn('panel kalite -> yikamadan dusum',e); }
-      if(yikDus>0){ try{ await konfKyYukle(true); }catch(e){} }
+      const yikDus=await panelKaliteYaz(siparisId,kalemIdx,{kk:val},'urun_ara');
       showToast(`✅ ${esc(kalemAdi)} · +${val} kaydedildi (${esc(sip?.sno||siparisId)})${yikDus>0?` · Yıkamadan ${yikDus} ad düştü`:''}`,2600);
     }
     await urunAraRender();
@@ -1810,6 +1911,17 @@ async function yikamaFisOlustur(){
   if(!meta.firma){showToast('Yıkama firması girin');document.getElementById('yf-firma')?.focus();return;}
   if(!_yfFisSatirlari.length){showToast('Fişe önce ürün ekleyin — yukarıdan arayıp "Fişe ekle" deyin');return;}
   const toplamAd=_yfFisSatirlari.reduce((s,x)=>s+x.adetTop,0);
+  {
+    /* Sipariş aşımı uyarısı — onaylanmazsa fiş oluşmaz. */
+    const asimSatir=_yfFisSatirlari.map(x=>{
+      const sip=siparisler.find(s=>String(s.id)===String(x.siparis_id));
+      const kalem=parseKalemler(sip||{})[x.kalem_idx]||{};
+      const onceki=konfKyKalemRows(x.siparis_id,x.kalem_idx)
+        .reduce((s,r)=>s+(parseInt(r.yikama_sevk_adet||0,10)||0),0);
+      return {sno:x.siparis_sno,kalem,asama:'Yıkama sevk',onceki,eklenen:x.adetTop};
+    });
+    if(!siparisAsimKontrol(asimSatir)){showToast('Fiş oluşturulmadı — hiçbir şey yazılmadı');return;}
+  }
   if(!confirm(`${_yfFisSatirlari.length} kalem · ${toplamAd.toLocaleString('tr-TR')} ad "${meta.firma}" firmasına yıkamaya sevk edilsin mi?`))return;
   const btn=document.getElementById('yf-olustur-btn');
   if(btn){btn.disabled=true;btn.textContent='Kaydediliyor…';}
@@ -1819,6 +1931,8 @@ async function yikamaFisOlustur(){
     const fisSatirlar=[];
     const kyDeltalar=[]; // [{id,pay}] — tüm fişin düz listesi (Geri Al'da kullanılır)
     for(const satir of _yfFisSatirlari){
+      /* Eski KD yıkama adedi tablodan büyükse önce devir — yoksa bu fiş toplamda görünmez. */
+      await konfKyDevirGerekirse(satir.siparis_id,satir.kalem_idx);
       const satirKy=[]; // sadece bu satırın kendi payları (Düzenle'de kullanılır)
       for(const p of satir.parcalar){
         if(p.pay<=0)continue;
@@ -2268,11 +2382,14 @@ function renderAsamaIcerik(asama){
     return gecen+iki+tamir+imha;
   };
   const topSip=kalemler.reduce((a,k)=>a+(parseInt(k.miktar)||0),0);
-  const topYap=kalemler.reduce((a,_,i)=>{
-    const kk=kd['kalem_'+i]||{};
-    if(asama==='kalite') return a+kaliteToplamKalem(kk);
-    return a+(parseInt(kk[alan.yapilan]||0)||0);
-  },0);
+  /* Kesim ve yıkama tek kurala göre (tablo + KD en büyüğü) — ana program ve mobille aynı sayı. */
+  const yapilanOf=(i,kk)=>{
+    if(asama==='kalite')return kaliteToplamKalem(kk);
+    if(asama==='kesim')return Math.max(konfKyKesilenToplam(girisSeciliId,i),parseInt(kk?.kesilen||0)||0);
+    if(asama==='yikama')return konfKalemYikamaSevk(girisSeciliId,i,kk);
+    return parseInt(kk?.[alan.yapilan]||0)||0;
+  };
+  const topYap=kalemler.reduce((a,_,i)=>a+yapilanOf(i,kd['kalem_'+i]||{}),0);
   const topKalan=topSip-topYap;
   const pct=topSip>0?Math.min(100,Math.round(topYap/topSip*100)):0;
 
@@ -2310,9 +2427,7 @@ function renderAsamaIcerik(asama){
     urunHtml+=kalemler.map((k,i)=>{
       const kk=kd['kalem_'+i]||{};
       const sipAdet=parseInt(k.miktar||0)||0;
-      const yapilan=asama==='kalite'
-        ? kaliteToplamKalem(kk)
-        : (parseInt(kk[alan.yapilan]||0)||0);
+      const yapilan=yapilanOf(i,kk);
       const kalan=Math.max(0,sipAdet-yapilan);
       const pctU=sipAdet>0?Math.min(100,Math.round(yapilan/sipAdet*100)):0;
       const baslik=[k.ad||k.kod||'Kalem '+(i+1),k.ebat||k.olcu,k.renk].filter(Boolean).join(' · ');
@@ -2388,6 +2503,8 @@ function renderAsamaIcerik(asama){
   const saveMap={kesim:'kesim',yikama:'yikama',dikim:'dikim',nakis:'nakis',baskı:'baski',ütü:'utu',sacak_baglama:'sacak_baglama',kalite:'kk',koli:'koli',sevk:'sevk'};
   const saveTip=saveMap[asama]||asama;
 
+  /* Yıkama sevkinin tek giriş yeri Yıkama Sevk Fişi — burada yalnız durum gösterilir. */
+  if(saveTip==='yikama')return ozet+`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;font-size:12px;line-height:1.5;color:var(--text2)">Yıkamaya sevk <b>Yıkama Sevk Fişi</b> ekranından girilir. Böylece her sevk tek yerde, kim girdiği ve ne zaman girdiğiyle kayıtlı kalır.</div>`;
   return ozet+`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px">${urunHtml}</div>`+`<button class="save-btn" style="background:${m.color}" onclick="girisKaydet('${saveTip}')">💾 ${m.ikon} ${m.label.toUpperCase()} KAYDET</button>`;
 }
 
@@ -2632,6 +2749,9 @@ async function logRevizeKaydet(origId,islem,kalemAd,siparisId){
 
 async function girisKaydet(tip){
   if(!girisSeciliId)return;
+  /* Yıkama sevkinin TEK giriş yeri Yıkama Sevk Fişi (tablo + fiş kaydı, kim/ne zaman).
+     Buradan yazılınca yalnız KD'ye düşüyor, fiş listesinde ve kuyrukta görünmüyordu. */
+  if(tip==='yikama'){showToast('Yıkama sevki Yıkama Fişi ekranından girilir — tek kayıt yeri orası',3200);return;}
   const btn=event.currentTarget;
   const origBtnText=btn?btn.textContent:'💾 KAYDET';
   if(btn){btn.disabled=true;btn.textContent='Kaydediliyor…';}
@@ -2654,7 +2774,7 @@ async function girisKaydet(tip){
       kd.kesim_tarih=gv('kf-kesim-tarih');kd.kumas_geldi=gc('kf-kumas-geldi');kd.yikama_yapildi=gc('kf-yikama');
       k.forEach((_,i)=>{if(!kd['kalem_'+i])kd['kalem_'+i]={};
         const ak=gi('k-kesilen-'+i),af=gi('k-fire_kesim-'+i);
-        if(ak){kd['kalem_'+i].kesilen=(parseInt(kd['kalem_'+i].kesilen||0)||0)+ak;putDelta(i,'kesilen',ak);}
+        if(ak)putDelta(i,'kesilen',ak); /* adet tabloya yazılır (aşağıda), KD'ye değil */
         if(af){kd['kalem_'+i].fire_kesim=(parseInt(kd['kalem_'+i].fire_kesim||0)||0)+af;putDelta(i,'fire_kesim',af);}});
     }else if(tip==='dikim'){
       kd.dikim_bas=gv('kf-dikim-bas');kd.dikim_bit=gv('kf-dikim-bit');
@@ -2667,9 +2787,10 @@ async function girisKaydet(tip){
       kd.kk_tarih=gv('kf-kk-tarih');kd.kk_personel=gv('kf-kk-personel');
       k.forEach((_,i)=>{if(!kd['kalem_'+i])kd['kalem_'+i]={};
         const ak=gi('k-kk_gecen-'+i),at=gi('k-tamir-'+i),ai=gi('k-imha-'+i);
-        if(ak){kd['kalem_'+i].kk_gecen=(parseInt(kd['kalem_'+i].kk_gecen||0)||0)+ak;putDelta(i,'kk_gecen',ak);}
-        if(at){kd['kalem_'+i].tamir=(parseInt(kd['kalem_'+i].tamir||0)||0)+at;putDelta(i,'tamir',at);}
-        if(ai){kd['kalem_'+i].imha=(parseInt(kd['kalem_'+i].imha||0)||0)+ai;putDelta(i,'imha',ai);}});
+        /* adetler panelKaliteYaz ile yazılır (aşağıda) — Ürün Ara ile aynı tek yol */
+        if(ak)putDelta(i,'kk_gecen',ak);
+        if(at)putDelta(i,'tamir',at);
+        if(ai)putDelta(i,'imha',ai);});
     }else if(tip==='koli'){
       kd.koli_tarih=gv('kf-koli-tarih');kd.koli_sayi=gv('kf-koli-sayi');
       k.forEach((_,i)=>{if(!kd['kalem_'+i])kd['kalem_'+i]={};
@@ -2693,8 +2814,57 @@ async function girisKaydet(tip){
     kd.kalite_toplam=tKK+tH;
     kd.koli_toplam=tKol;
     kd.hatali_toplam=tH;
+    {
+      /* Sipariş aşımı uyarısı — onaylanmazsa hiçbir şey yazılmaz. */
+      const sipSno=(siparisler.find(s=>String(s.id)===String(girisSeciliId))||{}).sno||'';
+      const n=v=>parseInt(v||0,10)||0;
+      const asamaAlan={kesilen:'Kesim',dikilen:'Dikim',kolide:'Koli',yikama_sevk:'Yıkama sevk',sevk_adet:'Sevk'};
+      const asimSatir=[];
+      Object.keys(deltaByKalem).forEach(key=>{
+        const i=Number(key),d=deltaByKalem[key],ki=kd['kalem_'+i]||{};
+        Object.keys(asamaAlan).forEach(alan=>{
+          if(!d[alan])return;
+          const onceki=alan==='kesilen'
+            ? Math.max(n(ki.kesilen),konfKyKesilenToplam(girisSeciliId,i))
+            : n(ki[alan])-d[alan];
+          asimSatir.push({sno:sipSno,kalem:k[i],asama:asamaAlan[alan],onceki,eklenen:d[alan]});
+        });
+        const kkEk=n(d.kk_gecen)+n(d.tamir)+n(d.imha);
+        if(kkEk){
+          const kkSimdi=n(ki.kk_gecen)+n(ki.tamir)+n(ki.imha)+n(ki.iki_kalite);
+          asimSatir.push({sno:sipSno,kalem:k[i],asama:'Kalite',onceki:kkSimdi,eklenen:kkEk});
+        }
+      });
+      if(!siparisAsimKontrol(asimSatir)){
+        showToast('Kayıt iptal edildi — hiçbir şey yazılmadı');
+        if(btn){btn.disabled=false;btn.textContent=origBtnText||'💾 KAYDET';}
+        return;
+      }
+    }
     await sbKdSet(girisSeciliId,'KD_KONFEKSIYON',kd);
     girisKd={...kd};
+
+    /* TEK KAYIT: kesim adedi Ürün Ara ile aynı tabloya (konf_kesim_yikama; kim/ne zaman
+       satırda), kalite adedi Ürün Ara ile aynı yazıcıya gider. Aynı giriş iki yere yazılmaz. */
+    if(tip==='kesim'||tip==='kk'){
+      const sipK=siparisler.find(s=>String(s.id)===String(girisSeciliId))||{};
+      const user=currentUser?.display_name||currentUser?.username||'Sistem';
+      for(const key of Object.keys(deltaByKalem)){
+        const i=Number(key),d=deltaByKalem[key],kalem=k[i]||{};
+        if(tip==='kesim'&&d.kesilen>0){
+          const rota=await konfKyRotaBelirle(girisSeciliId,i);
+          await konfKyDevirGerekirse(girisSeciliId,i);
+          await konfKyInsert({
+            siparis_id:girisSeciliId,siparis_sno:sipK.sno||'',firma:sipK.firma||'',
+            kalem_idx:i,desen:kalem.ad||kalem.kod||'',renk:kalem.renk||'',ebat:kalem.ebat||kalem.olcu||'',
+            kesilen_adet:d.kesilen,rota,kaynak:'PANEL_VERI_GIRISI',kesim_user:user
+          });
+        }
+        if(tip==='kk')await panelKaliteYaz(girisSeciliId,i,{kk:d.kk_gecen,tamir:d.tamir,imha:d.imha},'veri_girisi');
+      }
+      if(tip==='kesim')await konfKyYukle(true);
+      girisKd=await getKd(girisSeciliId,'KD_KONFEKSIYON',true);
+    }
 
     // İş akışı logu — her kalem için ayrı kayıt
     const islemAdMap={kesim:'KESİM',dikim:'DİKİM',kk:'KALİTE KONTROL',koli:'KOLİ',yikama:'YIKAMA',nakis:'NAKIŞ',baski:'BASKI',utu:'ÜTÜ',sacak_baglama:'SAÇAK BAĞLAMA',sevk:'SEVK'};
@@ -2710,8 +2880,11 @@ async function girisKaydet(tip){
       const kalemAdi=[kalem.ad||kalem.kod||'Kalem '+(i+1),kalem.renk,kalem.ebat||kalem.olcu].filter(Boolean).join(' · ');
       const detayAlanEtiket={kesilen:'Kesilen',fire_kesim:'Fire kesim',dikilen:'Dikilen',fire_dikim:'Fire dikim',kk_gecen:'Kalite geçen',tamir:'Tamir',imha:'İmha',kolide:'Kolide',yikama_sevk:'Yıkama sevk',nakis_adet:'Nakış',baski_adet:'Baskı',utu_adet:'Ütü',sacak_baglama_adet:'Saçak bağlama',sevk_adet:'Sevk'};
       const detayList=Object.keys(delta).map(a=>`${detayAlanEtiket[a]||a}: +${delta[a]}`);
-      // Sadece değer varsa kaydet
-      if(!logAlan||yapilan>0){
+      // Sadece değer varsa kaydet. Kesim adedi tabloda, kalite ortak yazıcıda kayıtlı —
+      // burada yalnız kesim FİRESİ iz olarak yazılır (miktar 0), kalite için satır yazılmaz.
+      if(tip==='kk')return;
+      if(tip==='kesim'&&!(delta.fire_kesim>0))return;
+      if(tip==='kesim'||!logAlan||yapilan>0){
         const notlar=JSON.stringify({
           kullanici:kullaniciAdi,
           urun_ad:kalem.ad||kalem.kod||'',
@@ -2719,14 +2892,14 @@ async function girisKaydet(tip){
           ebat:kalem.ebat||kalem.olcu||'',
           siparis_adet:sipAdet,
           birim:kalemBirimEtiket(kalem),
-          [logAlan||'miktar']:yapilan,
+          [logAlan||'miktar']:tip==='kesim'?0:yapilan,
           detay:detayList
         });
         logPromises.push(sb.from('siparis_akis').insert([{
           siparis_id:coerceSiparisIdForDb(girisSeciliId),
           islem:islemAdi,
           kalem_ad:kalemAdi,
-          miktar:yapilan,
+          miktar:tip==='kesim'?0:yapilan,
           notlar:notlar
         }]));
       }
@@ -2738,7 +2911,10 @@ async function girisKaydet(tip){
     const kdUa = await getKd(girisSeciliId,'KD_URUN_AGACI');
     renderGirisAsamaTabs(kdUa);
     showToast('Kayıt yapıldı',1800);
-  }catch(e){showToast('Kayıt başarısız',2200);}
+  }catch(e){
+    if(e&&e.ikizIptal)showToast('Kayıt yapılmadı — aynı ürüne aynı adet zaten girilmiş',3200);
+    else showToast('Kayıt başarısız: '+(e?.message||e),2600);
+  }
   if(btn){btn.disabled=false;btn.textContent=origBtnText||'💾 KAYDET';}
 }
 
