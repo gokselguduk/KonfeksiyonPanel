@@ -712,8 +712,10 @@ async function konfSiparisFotolarYukle(sip,force){
   if(!sip||!sip.id)return sip;
   if(!force&&siparisFotograflarFromRaw(siparisKayitFotoAlani(sip)).length)return sip;
   try{
-    let{data,error}=await sb.from('siparisler').select('siparis_fotograflar,fotograf').eq('id',sip.id).maybeSingle();
-    if(error)({data,error}=await sb.from('siparisler').select('fotograf').eq('id',sip.id).maybeSingle());
+    /* 'fotograf' kolonu şemada YOK (24.09.2026, canlıda doğrulandı) — bunu
+       select'e eklemek PostgREST'i 42703 ile düşürüyor, sorgu HİÇ dönmüyor
+       ve fotoğraflar hep boş kalıyor. Gerçek/tek kolon: siparis_fotograflar. */
+    const{data,error}=await sb.from('siparisler').select('siparis_fotograflar').eq('id',sip.id).maybeSingle();
     if(!error&&data){
       Object.assign(sip,data);
       const idx=siparisler.findIndex(x=>String(x.id)===String(sip.id));
