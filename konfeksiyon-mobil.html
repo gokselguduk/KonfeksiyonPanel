@@ -488,6 +488,37 @@ async function prefetchKdData(){
 }
 
 function initSB(){const c=window.__ERP_SUPABASE;if(!c||!c.url||!c.anonKey){showErr('erp-config.js yapılandırılmamış.');return false;}sb=supabase.createClient(c.url.trim(),c.anonKey.trim());return true;}
+
+/* Bağlantı hazırlığı (12.10.2026): tablet açılırken Wi-Fi birkaç saniye geç bağlanıyor — sayfa önbellekten açılıp
+   veritabanı kütüphanesi / erp-config.js inemeyince sb hiç kurulmuyor ve bir daha denenmiyordu; girişte
+   "Supabase bağlantısı kurulamadı" kalıyordu. Eksik olan yeniden yüklenir (kütüphane için ikinci adres de var),
+   internet gelince ve 5 sn'de bir tekrar denenir; hazır olunca oturum açılır. */
+const SB_KUTUPHANE=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js','https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js'];
+function betikYukle(src){return new Promise((ok,no)=>{const e=document.createElement('script');e.src=src;e.onload=()=>ok();e.onerror=()=>{e.remove();no(new Error(src));};document.head.appendChild(e);});}
+let _sbHazirlaniyor=null,_sbBekleZaman=null;
+async function sbHazirla(){
+  if(sb)return true;
+  if(_sbHazirlaniyor)return _sbHazirlaniyor;
+  _sbHazirlaniyor=(async()=>{
+    if(!window.__ERP_SUPABASE){try{await betikYukle('erp-config.js?v='+Date.now());}catch(e){}}
+    if(!window.supabase){for(const u of SB_KUTUPHANE){try{await betikYukle(u);break;}catch(e){}}}
+    if(!window.supabase||!window.__ERP_SUPABASE)return false;
+    try{return initSB();}catch(e){return false;}
+  })().finally(()=>{_sbHazirlaniyor=null;});
+  return _sbHazirlaniyor;
+}
+/** Bağlantı kurulunca acilis bir kez çalışır (oturum varsa panel açılır); kurulamazsa internet gelince / 5 sn'de bir yeniden. */
+function sbBekleVeAc(acilis){
+  let bitti=false;
+  const dene=async()=>{
+    if(bitti||!(await sbHazirla())||bitti)return;
+    bitti=true;clearInterval(_sbBekleZaman);_sbBekleZaman=null;window.removeEventListener('online',dene);
+    acilis();
+  };
+  window.addEventListener('online',dene);
+  _sbBekleZaman=setInterval(dene,5000);
+  dene();
+}
 /** onclick / insert için: tam sayı id ise number, aksi halde olduğu gibi (UUID vb.) */
 function coerceSiparisIdForDb(id){
   const s=String(id??'').trim();
@@ -658,7 +689,13 @@ async function doLogin(){
   const btn=document.getElementById('login-btn');
   document.getElementById('login-err').style.display='none';
   if(!u||!p){showLoginErr('Kullanıcı adı ve şifre giriniz.');return;}
-  if(!sb){showLoginErr('Supabase bağlantısı kurulamadı.');return;}
+  if(!sb){
+    /* açılışta internet yoktuysa şimdi bağlanmayı dene (bkz. sbHazirla) */
+    btn.disabled=true;btn.textContent='Bağlanıyor…';
+    const hazir=await sbHazirla();
+    btn.disabled=false;btn.textContent='Giriş Yap';
+    if(!hazir){showLoginErr(navigator.onLine===false?'İnternet yok — tabletin Wi-Fi bağlantısını kontrol edin.':'Veritabanına bağlanılamadı — internet bağlantısını kontrol edip tekrar deneyin.');return;}
+  }
   btn.disabled=true;btn.textContent='Giriş yapılıyor…';
   try{
     const{data,error}=await sb.rpc('erp_login',{p_username:u,p_password:p});
@@ -3641,7 +3678,7 @@ window.addEventListener('offline',()=>{if(karsilamaAcik())karsilamaCiz();});
    ve 10 dk'da bir surum.json (birkaç bayt) okunur; farklıysa ve kimse çalışmıyorsa (60 sn dokunulmamış,
    klavye açık değil, dolu sayı kutusu yok, kayıt gönderilmiyor) sayfa yeni adresle yenilenir. Bekleyen
    kayıtlar ve oturum tablette kalır. Aynı sürüm için en çok 10 dk'da bir. Yerelde '__SURUM__' → bakılmaz. */
-const PANEL_SURUM='20261012-25d2dbcb';
+const PANEL_SURUM='20261012-d2c56b6b';
 function panelMesgulMu(){
   if(typeof hmAcik==='function'&&hmAcik())return true;
   if(Date.now()-_sonEtkilesim<60000)return true;
@@ -3773,11 +3810,13 @@ window.addEventListener('DOMContentLoaded',()=>{
   }
   /* Sekme/uygulama arasında geçiş yapınca (visibilitychange/focus) otomatik yenileme YOK —
      tek yenileme yolu üst çubuktaki 🔄 Yenile düğmesi. */
-  if(!initSB())return;
-  if(tryRestoreSession()){
-    startApp();
-    startLiveSync();
-  }
+  /* kütüphane / ayar inmediyse (açılışta internet yoktu) internet gelince yeniden denenir */
+  sbBekleVeAc(()=>{
+    if(tryRestoreSession()){
+      startApp();
+      startLiveSync();
+    }
+  });
 });
 </script>
 </body>
