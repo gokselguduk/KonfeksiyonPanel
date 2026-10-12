@@ -3754,7 +3754,7 @@ window.addEventListener('offline',()=>{if(karsilamaAcik())karsilamaCiz();});
    ve 10 dk'da bir surum.json (birkaç bayt) okunur; farklıysa ve kimse çalışmıyorsa (60 sn dokunulmamış,
    klavye açık değil, dolu sayı kutusu yok, kayıt gönderilmiyor) sayfa yeni adresle yenilenir. Bekleyen
    kayıtlar ve oturum tablette kalır. Aynı sürüm için en çok 10 dk'da bir. Yerelde '__SURUM__' → bakılmaz. */
-const PANEL_SURUM='20261012-01ae0262';
+const PANEL_SURUM='__SURUM__';
 function panelMesgulMu(){
   if(typeof hmAcik==='function'&&hmAcik())return true;
   if(Date.now()-_sonEtkilesim<60000)return true;
