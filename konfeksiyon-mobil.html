@@ -2405,6 +2405,24 @@ async function yikamaFisGecmisRender(force){
   }).join('');
 }
 
+/* PDF / Yazdır kilitli tablette (12.10.2026): Android WebView PDF indirmeyi ve window.print'i desteklemiyor;
+   window.open ise formu panelin YERİNE açıp tableti kilitli bırakıyordu (geri yok). Kilit uygulaması 1.2+
+   (SimteksKiosk.pdfAc) varsa PDF burada üretilip ona verilir: İndirilenler/Simteks'e kaydedilir ve Android
+   yazdırma ekranı açılır (yazıcı ya da "PDF olarak kaydet"). Eski kilit uygulamasında (köprü yok, WebView)
+   yalnız uyarı — sayfa değiştirilmez. Bilgisayar/telefon tarayıcısında eskisi gibi indirir / yazdırır. */
+function kioskPdfVar(){return !!(window.SimteksKiosk&&typeof SimteksKiosk.pdfAc==='function');}
+function kioskEskiMi(){return !kioskPdfVar()&&/; wv\)/.test(navigator.userAgent);}
+async function konfPdfCikar(shell,ayar,yatay){
+  if(kioskEskiMi()){showToast('PDF / yazdırma için tablet uygulaması güncellenmeli',3600);return;}
+  const is=window.html2pdf().set(ayar).from(shell);
+  if(!kioskPdfVar()){await is.save();return;}
+  const uri=String(await is.outputPdf('datauristring')||'');
+  const b64=uri.slice(uri.indexOf(',')+1);
+  if(!b64){showToast('❌ PDF hazırlanamadı',3200);return;}
+  const yer=String(SimteksKiosk.pdfAc(b64,ayar.filename||'simteks.pdf',!!yatay)||'');
+  if(yer.startsWith('HATA'))showToast('❌ PDF kaydedilemedi: '+yer.slice(5),4200);
+  else showToast('📄 PDF kaydedildi: '+yer,3600);
+}
 function konfEnsureHtml2Pdf(){
   if(typeof window.html2pdf!=='undefined')return Promise.resolve();
   if(window._html2pdfPromise)return window._html2pdfPromise;
@@ -2548,17 +2566,19 @@ async function siparisFormuPdfIndir(sip){
   const shell=document.createElement('div');
   shell.innerHTML=konfPdfShellHtml({title:'SİPARİŞ FORMU',subtitle:`${sip.firma||'—'} · ${kalemler.length} kalem`,docNo:sip.sno,bodyHtml:siparisFormuPdfBodyHtml(sip,kalemler),note:'Sistem üzerindeki güncel sipariş kaydından oluşturulmuştur.'});
   const dosyaAd=String(sip.sno||sip.id||'siparis').replace(/[^\w\-]+/g,'_');
-  window.html2pdf().set({
+  await konfPdfCikar(shell,{
     margin:[6,6,6,6],
     filename:`siparis_formu_${dosyaAd}.pdf`,
     image:{type:'jpeg',quality:0.95},
     html2canvas:{scale:2,useCORS:true},
     jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
     pagebreak:{mode:['avoid-all','css','legacy']}
-  }).from(shell).save();
+  },false);
 }
 
 async function siparisFormuYazdir(sip){
+  /* Kilitli tablette yazdırma = PDF + Android yazdırma ekranı (yeni pencere açılmaz) */
+  if(kioskPdfVar()||kioskEskiMi())return siparisFormuPdfIndir(sip);
   sip=sip||selectedSiparis;
   if(!sip){showToast('Önce bir sipariş açın');return;}
   const kalemler=parseKalemler(sip);
@@ -2586,17 +2606,19 @@ async function yikamaFisPdfIndir(fis){
   const shell=document.createElement('div');
   shell.innerHTML=konfPdfShellHtml({title:'YIKAMA SEVK FİŞİ',subtitle:`Yıkamaya sevk · ${satirlar.length} kalem`,docNo,bodyHtml:yikamaFisPdfBodyHtml(satirlar,meta),note:`Konfeksiyon yıkama sevk fişi. Hazırlayan: ${hazirlayan}.`});
   const dosyaAd=(meta.irsaliye||docNo).replace(/[^\w\-]+/g,'_');
-  window.html2pdf().set({
+  await konfPdfCikar(shell,{
     margin:[6,6,6,6],
     filename:`yikama_sevk_fisi_${dosyaAd}.pdf`,
     image:{type:'jpeg',quality:0.95},
     html2canvas:{scale:2,useCORS:true},
     jsPDF:{unit:'mm',format:'a4',orientation:'landscape'},
     pagebreak:{mode:['avoid-all','css','legacy']}
-  }).from(shell).save();
+  },true);
 }
 
 function yikamaFisYazdir(fis){
+  /* Kilitli tablette yazdırma = PDF + Android yazdırma ekranı (yeni pencere açılmaz) */
+  if(kioskPdfVar()||kioskEskiMi())return yikamaFisPdfIndir(fis);
   fis=fis||_sonYikamaFis;
   if(!fis){showToast('Önce bir fiş oluşturun');return;}
   const{meta,satirlar}=fis;
@@ -3678,7 +3700,7 @@ window.addEventListener('offline',()=>{if(karsilamaAcik())karsilamaCiz();});
    ve 10 dk'da bir surum.json (birkaç bayt) okunur; farklıysa ve kimse çalışmıyorsa (60 sn dokunulmamış,
    klavye açık değil, dolu sayı kutusu yok, kayıt gönderilmiyor) sayfa yeni adresle yenilenir. Bekleyen
    kayıtlar ve oturum tablette kalır. Aynı sürüm için en çok 10 dk'da bir. Yerelde '__SURUM__' → bakılmaz. */
-const PANEL_SURUM='20261012-d2c56b6b';
+const PANEL_SURUM='20261012-0d71f77c';
 function panelMesgulMu(){
   if(typeof hmAcik==='function'&&hmAcik())return true;
   if(Date.now()-_sonEtkilesim<60000)return true;
