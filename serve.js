@@ -2,7 +2,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const root = __dirname;
-const port = 8766;
+/* Önizleme başka sohbette 8766'yı tutuyorsa PORT ile boş bir kapı verir; elle çalıştırınca yine 8766. */
+const port = Number(process.env.PORT) || 8766;
 http.createServer((req, res) => {
   let p = decodeURIComponent((req.url || '/').split('?')[0]);
   if (p === '/') p = '/konfeksiyon-mobil.html';

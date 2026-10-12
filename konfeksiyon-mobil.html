@@ -339,6 +339,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button id="uretim-mod-btn-yikama" class="giris-subtab-btn" onclick="uretimModSec('yikama')">💧 Yıkama Fişi</button>
     </div>
     <div id="giris-mod-ara-area">
+      <div id="kesim-onu-area"></div>
       <div class="sel-card">
         <div class="sec-title" style="margin-bottom:7px">Ürün Adıyla Çapraz Arama</div>
         <div style="font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.4">
@@ -1171,6 +1172,7 @@ function uretimModSec(mod){
   }else{
     urunAraAsama=mod;
     urunAraRender();
+    kesimOnuRender();
   }
 }
 
@@ -1400,6 +1402,20 @@ function veriGirisiDuzenleKapat(i){
   veriGirisleriRenderListe();
 }
 
+/* İşlem izi (12.10.2026, kullanıcı: Aktif kullanıcılarda kim düzeltti / geri aldı görünmüyordu): Girişler'den
+   düzelt / geri al satırın ÜSTÜNE yazılıyor, kimin yaptığı kalmıyordu. Ana programdaki erpIslemIzYaz (11) ile aynı
+   tablo ve biçim (depo_hareket_iz, kaynak KONF_PANEL_GIRIS) → Aktif kullanıcılar ve Günlük İşlemler'de görünür.
+   İz yazılamazsa asıl işlem DÜŞMEZ, yalnız uyarı. */
+async function panelIzYaz(tablo,kayitId,islem,etiket,eski,yeni,kaynak){
+  try{
+    const kim=String(currentUser?.display_name||currentUser?.username||'').trim()||'—';
+    const{error}=await sb.from('depo_hareket_iz').insert([{tablo,kayit_id:String(kayitId??''),islem,etiket:String(etiket||'').slice(0,500),
+      eski:eski??null,yeni:yeni??null,kullanici:kim,kaynak:kaynak||'KONF_PANEL_GIRIS'}]);
+    if(error)throw error;
+  }catch(e){console.warn('işlem izi yazılamadı',e?.message||e);showToast('⚠️ Kayıt yapıldı ama kim yaptığı yazılamadı',2600);}
+}
+function vgIzEtiket(e){return[e.sno,e.firma,e.etiket].filter(Boolean).join(' · ');}
+
 async function veriGirisiKesimKaydet(i){
   const e=_vgListe[i];
   if(!e)return;
@@ -1413,6 +1429,7 @@ async function veriGirisiKesimKaydet(i){
       return{kesilen_adet:yeniVal};
     });
     if(sevkEngel){showToast(`Bu satırdan zaten ${sevkEngel} adet yıkamaya sevk edilmiş, ${sevkEngel}'den küçük giremezsiniz`);return;}
+    await panelIzYaz('konf_kesim_yikama',e.id,'DUZENLE',`Kesim adedi düzeltildi · ${vgIzEtiket(e)} · ${e.adet} → ${yeniVal}`,{kesilen_adet:e.adet,giren:e.user||''},{kesilen_adet:yeniVal});
     await konfKyYukle(true);
     showToast('✅ Güncellendi');
     await veriGirisleriRender();
@@ -1437,6 +1454,7 @@ async function veriGirisiKaliteKaydet(i){
     kd.kk_gecen=tKK;
     await sbKdSet(e.siparisId,'KD_KONFEKSIYON',kd);
     await sbYaz(()=>sb.from('siparis_akis').update({notlar:JSON.stringify({...e.raw,kk_gecen:yeniVal,duzeltildi:true})}).eq('id',e.id),'Kalite kaydı');
+    await panelIzYaz('siparis_akis',e.id,'DUZENLE',`Kalite kaydı düzeltildi · ${vgIzEtiket(e)} · ${eskiVal} → ${yeniVal}`,{kk_gecen:eskiVal,giren:e.user||''},{kk_gecen:yeniVal});
     showToast('✅ Güncellendi');
     await veriGirisleriRender();
   }catch(err){showToast('❌ Güncellenemedi: '+(err.message||err));}
@@ -1519,6 +1537,8 @@ async function veriGirisiFisKaydet(btn,i){
       kalem_ad:firma,miktar:toplamAd,
       notlar:JSON.stringify({...e.raw,fis_firma:firma,fis_irsaliye:irsaliye,toplam_ad:toplamAd,kalem_say:yeniSatirlar.length,satirlar:yeniSatirlar,ky_deltalar:yeniKyDeltalar})
     }).eq('id',e.id),'Yıkama fişi');
+    await panelIzYaz('siparis_akis',e.id,'DUZENLE',`Yıkama fişi düzeltildi · ${[e.sno,firma,irsaliye&&'irsaliye '+irsaliye].filter(Boolean).join(' · ')} · ${parseInt(e.adet||0,10)||0} → ${toplamAd} ad`,
+      {toplam_ad:parseInt(e.adet||0,10)||0,fis_firma:e.raw?.fis_firma||'',fis_irsaliye:e.raw?.fis_irsaliye||'',giren:e.user||''},{toplam_ad:toplamAd,fis_firma:firma,fis_irsaliye:irsaliye});
     showToast('✅ Fiş güncellendi');
     await veriGirisleriRender();
   }catch(err){
@@ -1535,6 +1555,7 @@ async function veriGirisiGeriAl(btn,i){
   try{
     if(e.tip==='kesim'){
       await konfKyUpdate(e.id,{aktif:false});
+      await panelIzYaz('konf_kesim_yikama',e.id,'SIL',`Kesim geri alındı · ${vgIzEtiket(e)} · ${e.adet} ad`,{kesilen_adet:e.adet,giren:e.user||''},null);
       await konfKyYukle(true);
     }else if(e.tip==='kalite'){
       const kd=await getKd(e.siparisId,'KD_KONFEKSIYON',true);
@@ -1547,6 +1568,7 @@ async function veriGirisiGeriAl(btn,i){
       kd.kk_gecen=tKK;
       await sbKdSet(e.siparisId,'KD_KONFEKSIYON',kd);
       await sbYaz(()=>sb.from('siparis_akis').update({notlar:JSON.stringify({...e.raw,iptal:true})}).eq('id',e.id),'Kalite kaydı');
+      await panelIzYaz('siparis_akis',e.id,'SIL',`Kalite kaydı geri alındı · ${vgIzEtiket(e)} · ${e.adet} ad`,{kk_gecen:e.adet,giren:e.user||''},null);
     }else if(e.tip==='yikama_fis'){
       const deltalar=e.raw.ky_deltalar||[];
       for(const d of deltalar){
@@ -1559,6 +1581,7 @@ async function veriGirisiGeriAl(btn,i){
       }
       await konfKyYukle(true);
       await sbYaz(()=>sb.from('siparis_akis').update({notlar:JSON.stringify({...e.raw,iptal:true})}).eq('id',e.id),'Yıkama fişi');
+      await panelIzYaz('siparis_akis',e.id,'SIL',`Yıkama fişi geri alındı · ${vgIzEtiket(e)} · ${e.adet||0} ad`,{toplam_ad:e.adet||0,giren:e.user||''},null);
       if(!deltalar.length){
         showToast('✅ Fiş silindi (eski sürüm — stok kaydı otomatik değişmedi)',3200);
         await veriGirisleriRender();
@@ -2118,6 +2141,7 @@ async function urunAraSatirKaydet(btn,siparisId,kalemIdx){
     if(asama==='kesim'){
       const rota=await urunAraSatirKaydetKesim(btn,sip,kalemIdx,kalem,val);
       showToast(`✅ ${esc(kalemAdi)} · +${val} kesildi (${esc(sip?.sno||siparisId)})${rota==='YIKAMA'?' · Yıkamaya hazır':' · Kaliteye hazır'}`,2600);
+      kesimOnuRender();
     }else{
       const yikDus=await panelKaliteYaz(siparisId,kalemIdx,{kk:val},'urun_ara');
       showToast(`✅ ${esc(kalemAdi)} · +${val} kaydedildi (${esc(sip?.sno||siparisId)})${yikDus>0?` · Yıkamadan ${yikDus} ad düştü`:''}`,2600);
@@ -2128,6 +2152,296 @@ async function urunAraSatirKaydet(btn,siparisId,kalemIdx){
     else showToast('❌ Kayıt başarısız: '+(e.message||e));
     if(btn){btn.disabled=false;btn.textContent=origTxt;}
   }
+}
+
+/* ── Kesim önü · elle işlemler (12.10.2026 akşam, kullanıcı kararı) ──
+   Aşağıdaki hesap hiçbir şey yazmaz; buradaki iki işlem kullanıcının düğmeyle yaptığı AÇIK işlemdir, kesim /
+   yıkama kaydına dokunmaz. Ana programdaki konfKesimOnuKapat / konfKesimOnuGeriAc (04-live-sync) ile AYNI alan:
+   • kesimOnuKapat  "✓ Bitti": artan mal (500 gelen / 480 kesilen → 20) listeden düşer — kalemin açık sevk
+                    satırlarına (KUMAS_GELIS) kesim_onu_kapali {ts,user,gelen,kesilen,artan} yazılır; kapalı satır
+                    hesaba girmez, sonradan gelen yeni sevk yeniden bekler.
+   • kesimOnuGeriAc işareti kaldırır ("Kapatılanlar" listesinden).
+   Yazmadan önce sevkler ve kesimler TAZE okunur, satırın veritabanındaki güncel notu üstüne yazılır; kim yaptığı
+   depo_hareket_iz'e (kaynak KESIM_ONU) gider → Günlük İşlemler / Aktif kullanıcılar. Yanlış sevki geri alma burada
+   yok: Dokuma tabletinde sevki yapan (aynı gün) ya da ana programda yetkili yapar. */
+let _kesimOnuMesgul=false;
+async function kesimOnuSatirlaraYaz(idler,degistir){
+  const{data:taze,error}=await sb.from('siparis_akis').select('id,notlar').in('id',idler);
+  if(error)throw error;
+  let n=0;
+  for(const row of(taze||[])){
+    let j={};try{j=JSON.parse(row.notlar||'{}')||{};}catch(e){continue;}
+    if(!degistir(j))continue;
+    const{data:yazilan,error:e2}=await sb.from('siparis_akis').update({notlar:JSON.stringify(j)}).eq('id',row.id).select('id');
+    if(e2)throw e2;
+    if(!(yazilan||[]).length)throw new Error('sevk satırı güncellenemedi');
+    n++;
+  }
+  return n;
+}
+function kesimOnuYazabilir(){
+  if(!currentUser){showToast('Önce oturum açın',2600);return false;}
+  if(navigator.onLine===false){showToast('📡 İnternet yok — şimdi yapılamaz',2800);return false;}
+  return true;
+}
+async function kesimOnuKapat(sid,ki){
+  if(_kesimOnuMesgul||!kesimOnuYazabilir())return;
+  _kesimOnuMesgul=true;
+  try{
+    const g=(await kesimOnuListeOku(true)).find(x=>x.sid===String(sid)&&x.ki===ki);
+    if(!g){showToast('Bu kalemde bekleyen mal kalmamış',2800);await kesimOnuRender();return;}
+    const say=(n,b)=>(Number(n)||0).toLocaleString('tr-TR',{maximumFractionDigits:b||0});
+    const ad=kesimOnuAd(g.sid,g.ki,g.ornek,g.kumas);
+    const gelen=[g.gelenAd?say(g.gelenAd)+' ad':'',g.gelenMt?say(g.gelenMt,1)+' m':''].filter(Boolean).join(' / ');
+    const kesilen=g.kesilenAd?say(g.kesilenAd)+' ad'+(g.metreMi&&g.kesilenMt?' ≈ '+say(g.kesilenMt,1)+' m':''):'yok';
+    const artan=g.metreMi?say(g.kalanMt,1)+' m':say(g.kalanAd)+' ad';
+    if(!confirm(`${ad.sno} · ${ad.etiket}\n\nGelen ${gelen} · kesilen ${kesilen} · artan ${artan}\n\nKesimi bitti sayılsın mı?\nSatır listeden düşer; kesim kayıtları değişmez. Adınızla kaydedilir, "Kapatılanlar"dan geri açılır.`
+      +(g.kesilenAd?'':'\n\n⚠ Bu maldan hiç kesim girilmemiş. Sevk yanlışsa kapatmayın — sevk geri alınmalı (dokuma tableti / ana program).')))return;
+    const yuv=v=>Math.round((v||0)*100)/100;
+    const kapali={ts:new Date().toISOString(),user:String(currentUser?.display_name||currentUser?.username||'').trim()||'—',
+      gelen_ad:g.gelenAd,gelen_mt:yuv(g.gelenMt),kesilen_ad:g.kesilenAd||0,kesilen_mt:g.metreMi?yuv(g.kesilenMt):0,
+      artan_ad:g.metreMi?0:g.kalanAd,artan_mt:g.metreMi?yuv(g.kalanMt):0,kaynak:'KONF_PANEL'};
+    const idler=g.sevkler.map(x=>x.id);
+    const n=await kesimOnuSatirlaraYaz(idler,j=>{if(j.kesim_onu_kapali)return false;j.kesim_onu_kapali=kapali;return true;});
+    if(n)await panelIzYaz('kesim_onu',g.sid+'|'+g.ki,'DEGISTIR',`${ad.sno} · ${ad.etiket} · kesimi bitti: gelen ${gelen}, kesilen ${kesilen}, artan ${artan}`,null,{...kapali,akis_ids:idler},'KESIM_ONU');
+    await kesimOnuRender(true);
+    showToast(n?'✅ Kesimi bitti — '+artan+' artan malla listeden düştü':'Bu kalem az önce kapatılmış',3000);
+  }catch(e){
+    showToast('❌ Kapatılamadı: '+(e.message||e),4200);
+  }finally{_kesimOnuMesgul=false;}
+}
+async function kesimOnuGeriAc(sid,ki,ts){
+  if(_kesimOnuMesgul||!kesimOnuYazabilir())return;
+  _kesimOnuMesgul=true;
+  try{
+    await kesimOnuSevkleriOku(true);
+    const satirlar=(_kesimOnu.kapali||[]).filter(x=>x.sid===String(sid)&&x.ki===ki&&String(x.j.kesim_onu_kapali?.ts||'')===String(ts||''));
+    if(!satirlar.length){showToast('Bu kapatma zaten geri açılmış',2800);await kesimOnuRender();return;}
+    const kp=satirlar[0].j.kesim_onu_kapali;
+    const ad=kesimOnuAd(String(sid),ki,satirlar[0].j,null);
+    if(!confirm(`${ad.sno} · ${ad.etiket}\n\nKapatan: ${kp.user||'—'} · ${new Date(kp.ts).toLocaleString('tr-TR')}\n\nGeri açılsın mı? Mal yeniden "Kesim önünde bekleyen" listesine girer. Adınızla kaydedilir.`))return;
+    const idler=satirlar.map(x=>x.id);
+    const n=await kesimOnuSatirlaraYaz(idler,j=>{
+      if(!j.kesim_onu_kapali||String(j.kesim_onu_kapali.ts||'')!==String(ts||''))return false;
+      delete j.kesim_onu_kapali;return true;
+    });
+    if(n)await panelIzYaz('kesim_onu',sid+'|'+ki,'DEGISTIR',`${ad.sno} · ${ad.etiket} · kesim önü geri açıldı (kapatan ${kp.user||'—'})`,{...kp,akis_ids:idler},null,'KESIM_ONU');
+    await kesimOnuRender(true);
+    showToast(n?'✅ Geri açıldı — mal yeniden kesim önünde':'Bu kapatma zaten geri açılmış',3000);
+  }catch(e){
+    showToast('❌ Geri açılamadı: '+(e.message||e),4200);
+  }finally{_kesimOnuMesgul=false;}
+}
+
+/* ── Kesim önünde bekleyen (12.10.2026) ──────────────────────────────
+   Dokuma Depo'dan Konfeksiyon'a sevk edilip (ana program ya da dokuma tableti → siparis_akis KUMAS_GELIS,
+   pipeline DOKUMA_DEPO_SEVK) henüz kesilmemiş mal. Ana programdaki konfKesimOnuBekleyenler (04-live-sync)
+   ile AYNI kural, kalem başına:
+     gelen   = kalemin sevk satırları (geçici sıfırlananlar hariç)
+     kesilen = kalemin İLK sevkinden sonra girilen kesimler (konf_kesim_yikama; Devir ve kesimsiz yıkama hariç;
+               12.10 öncesinde satıra yazılmış kesilen_adet ile büyüğü). İlk sevkten önceki kesim sayılmaz.
+     kalan   = gelen − kesilen (adet); metreyle gelen kumaşta (kumaş planı) kesilen adet × plandaki m/adet (fire dahil)
+   "✓ Bitti" ile kapatılan sevk satırı (kesim_onu_kapali) hesaba girmez — yazıcılar yukarıda, bu bölümün dışında.
+   Yalnız HESAP — hiçbir kayıt yazılmaz (aşama verisi bağımsız). Panel kendiliğinden yenilenmediği için Kesim
+   sekmesi açılınca, Yenile'de ve buradan kesim girilince hesaplanır: sevkler tek küçük sorgu (12.10: 12 satır,
+   11 KB, ~0,7 sn; 60 sn önbellek), kesimler zaten yüklü konfKyYukle önbelleği. Satıra dokununca sipariş aranır. */
+const KESIM_ONU_PIPELINE='DOKUMA_DEPO_SEVK';
+/* Başlangıç 12.10.2026 (ana programla aynı): daha eski sevkin kesimi eski kayıtlarda, tabloda karşılığı yok */
+const KESIM_ONU_BASLANGIC=new Date(2026,9,12).getTime();
+let _kesimOnu={sevkler:null,kapali:[],ts:0};
+async function kesimOnuSevkleriOku(force){
+  if(!force&&_kesimOnu.sevkler&&(Date.now()-_kesimOnu.ts)<60000)return _kesimOnu.sevkler;
+  const{data,error}=await tumSatirlariCek(()=>sb.from('siparis_akis').select('id,created_at,siparis_id,notlar')
+    .eq('islem','KUMAS_GELIS').like('notlar','%'+KESIM_ONU_PIPELINE+'%').order('id',{ascending:true}));
+  if(error)throw error;
+  const l=[],kapali=[];
+  (data||[]).forEach(r=>{
+    let j={};try{j=JSON.parse(r.notlar||'{}')||{};}catch(e){}
+    const ki=parseInt(j.kalem_idx,10),t=Date.parse(j.ts||r.created_at||'')||0;
+    if(j.pipeline!==KESIM_ONU_PIPELINE||j.gecici_kesim_onu_sifir||!Number.isFinite(ki)||ki<0||t<KESIM_ONU_BASLANGIC)return;
+    /* "✓ Bitti" ile kapatılan satır hesaba girmez (ana program: || j.kesim_onu_kapali) — ayrı listede, geri açmak için */
+    (j.kesim_onu_kapali?kapali:l).push({id:r.id,sid:String(r.siparis_id),ki,t,
+      ad:parseInt(j.adet||0,10)||0,mt:parseFloat(j.mt)||0,kg:parseFloat(j.kg)||0,kes:parseInt(j.kesilen_adet||0,10)||0,j});
+  });
+  _kesimOnu={sevkler:l,kapali,ts:Date.now()};
+  return l;
+}
+/** "1,3" virgüllü ondalık (ana program uaSayi ile aynı). */
+function kesimOnuSayi(v){
+  if(typeof v==='number')return Number.isFinite(v)?v:0;
+  let s=String(v??'').trim().replace(/\s+/g,'');
+  if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'');
+  const n=parseFloat(s.replace(',','.'));
+  return Number.isFinite(n)?n:0;
+}
+/** Metreyle gelen kumaşın (kumaş planı, ana program kumasPlaniHesapla kuralı) kalemleri: {km,kalemler:[{ki,m}]} —
+    m = 1 adet için kumaş, fire dahil; metre/kg birimli kalemde 0. Plan ya da sipariş yoksa null. */
+function kesimOnuKumasKalemleri(sid,ki){
+  const ua=kdCache['KD_URUN_AGACI_'+sid];
+  const kumaslar=ua?.siparis?.kumas_plani?.kumaslar;
+  const sip=siparisler.find(s=>String(s.id)===String(sid));
+  if(!sip||!Array.isArray(kumaslar)||!kumaslar.length)return null;
+  const idler=kumaslar.map(k=>String(k.id||'')).filter(Boolean);
+  const tek=idler.length===1?idler[0]:null;
+  const kalemKumas=i=>{const v=String(ua['u_'+i]?.kumas_id||'');return v==='-'?null:(idler.includes(v)?v:(!v&&tek?tek:null));};
+  const kid=kalemKumas(ki);
+  if(!kid)return null;
+  const kalemler=[];
+  parseKalemler(sip).forEach((k,i)=>{
+    if(kalemKumas(i)!==kid)return;
+    const birim=String(siparisKalemBirim(k)||'').toUpperCase();
+    const a=ua['u_'+i]||{};
+    kalemler.push({ki:i,m:/^(M|KG)/.test(birim)?0:kesimOnuSayi(a.kumas_metre)*(1+kesimOnuSayi(a.kumas_tolerans)/100)});
+  });
+  return{km:kumaslar.find(k=>String(k.id||'')===kid)||{},kalemler};
+}
+/** Saf hesap: sevkler + kesim satırları → bekleyen kalemler, en uzun bekleyen üstte. */
+function kesimOnuHesapla(sevkler,kyRows){
+  const grup=new Map();
+  (sevkler||[]).forEach(s=>{
+    const a=s.sid+'|'+s.ki;
+    let g=grup.get(a);
+    if(!g)grup.set(a,g={sid:s.sid,ki:s.ki,ornek:s.j,sevkler:[],gelenAd:0,gelenMt:0,gelenKg:0,satirKes:0});
+    g.sevkler.push(s);g.gelenAd+=s.ad;g.gelenMt+=s.mt;g.gelenKg+=s.kg;g.satirKes+=s.kes;
+  });
+  if(!grup.size)return[];
+  const kesimler=new Map();
+  grup.forEach(g=>kesimler.set(g.sid,[]));
+  (kyRows||[]).forEach(r=>{
+    const l=kesimler.get(String(r.siparis_id));
+    if(l&&r.aktif!==false&&!konfKyKesimsizMi(r)&&!konfKyDevirMi(r))l.push(r);
+  });
+  const sonraKesilen=(g,ki)=>kesimler.get(g.sid)
+    .filter(r=>Number(r.kalem_idx)===ki&&(Date.parse(r.kesim_ts||r.created_at||'')||0)>=g.ilk)
+    .reduce((s,r)=>s+(parseInt(r.kesilen_adet,10)||0),0);
+  const out=[];
+  grup.forEach(g=>{
+    g.sevkler.sort((a,b)=>a.t-b.t);
+    g.ilk=g.sevkler[0].t;
+    g.metreMi=!(g.gelenAd>0);
+    let dusen;
+    if(!g.metreMi){
+      g.kesilenAd=Math.max(g.satirKes,sonraKesilen(g,g.ki));
+      g.kalanAd=Math.max(0,g.gelenAd-g.kesilenAd);
+      if(g.kalanAd<=0)return;
+      dusen=g.kesilenAd;
+    }else{
+      if(!(g.gelenMt>0))return;
+      const kumas=kesimOnuKumasKalemleri(g.sid,g.ki);
+      g.kumas=kumas?kumas.km:null;
+      g.kesilenAd=0;g.kesilenMt=0;g.metresizAd=0;
+      (kumas?kumas.kalemler:[{ki:g.ki,m:0}]).forEach(u=>{
+        const ad=sonraKesilen(g,u.ki);
+        g.kesilenAd+=ad;
+        if(u.m>0)g.kesilenMt+=ad*u.m;else g.metresizAd+=ad;
+      });
+      g.kalanMt=Math.max(0,g.gelenMt-g.kesilenMt);
+      if(g.kalanMt<0.01)return;
+      dusen=g.kesilenMt;
+    }
+    /* Bekleme: kesimle henüz kapanmamış en eski sevkin tarihi */
+    g.bekleyenTs=g.sevkler[g.sevkler.length-1].t;
+    for(const s of g.sevkler){const mik=g.metreMi?s.mt:s.ad;if(dusen<mik){g.bekleyenTs=s.t;break;}dusen-=mik;}
+    out.push(g);
+  });
+  return out.sort((a,b)=>a.bekleyenTs-b.bekleyenTs);
+}
+/** Satırda görünen ad (bekleyen + kapatılan aynı yerden): {sno,firma,etiket}. j = sevk satırının notu. */
+function kesimOnuAd(sid,ki,j,kumas){
+  const sip=siparisler.find(s=>String(s.id)===String(sid));
+  const k=parseKalemler(sip||{})[ki]||{};
+  j=j||{};
+  return{sno:sip?.sno||j.lot_no||('#'+sid),firma:sip?.firma||j.firma||'',
+    etiket:kumas?((kumas.ad||kumas.kod||'Kumaş')+' · kumaş '+(kumas.id||'')+' · HAM')
+      :[k.ad||k.kod||j.kumas_cinsi||'Kalem '+(ki+1),k.renk||j.kalem_renk,k.ebat||k.olcu||j.kalem_ebat].filter(Boolean).join(' · ')};
+}
+/** Kapatılanlar (son 30 gün): aynı kapatmanın satırları tek satır; "Geri aç". */
+let _kesimOnuKapaliAcik=false;
+function kesimOnuKapaliHtml(){
+  const say=(n,b)=>(Number(n)||0).toLocaleString('tr-TR',{maximumFractionDigits:b||0});
+  const sinir=Date.now()-30*86400000,grup=new Map();
+  (_kesimOnu.kapali||[]).forEach(s=>{
+    const kp=s.j.kesim_onu_kapali,t=Date.parse(kp.ts||'')||0;
+    if(t<sinir)return;
+    const a=s.sid+'|'+s.ki+'|'+kp.ts;
+    if(!grup.has(a))grup.set(a,{sid:s.sid,ki:s.ki,kp,t,j:s.j});
+  });
+  const l=[...grup.values()].sort((a,b)=>b.t-a.t);
+  if(!l.length)return'';
+  return `<details id="kesim-onu-kapali" ${_kesimOnuKapaliAcik?'open':''} ontoggle="_kesimOnuKapaliAcik=this.open" style="padding:8px 14px 10px">
+    <summary style="font-size:10px;font-weight:700;color:var(--text3);cursor:pointer">Kapatılanlar (son 30 gün) · ${l.length}</summary>`
+    +l.map(g=>{
+      const ad=kesimOnuAd(g.sid,g.ki,g.j,null);
+      const artan=g.kp.gelen_ad>0?say(g.kp.artan_ad)+' ad':say(g.kp.artan_mt,1)+' m';
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);margin-top:6px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;font-weight:800;color:var(--text2)">${esc(ad.sno)} <span style="font-weight:600">${esc(ad.etiket)}</span></div>
+          <div style="font-size:9.5px;color:var(--text3);margin-top:2px">artan ${esc(artan)} · ${esc(g.kp.user||'—')} · ${esc(new Date(g.t).toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}))}</div>
+        </div>
+        <button type="button" onclick="kesimOnuGeriAc('${esc(g.sid)}',${g.ki},'${esc(g.kp.ts||'')}')" style="flex-shrink:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:11px;font-weight:700;padding:7px 10px;cursor:pointer;font-family:inherit">Geri aç</button>
+      </div>`;
+    }).join('')+'</details>';
+}
+function kesimOnuHtml(liste){
+  const say=(n,b)=>(Number(n)||0).toLocaleString('tr-TR',{maximumFractionDigits:b||0});
+  const kapaliHtml=kesimOnuKapaliHtml();
+  if(!liste.length)return `<div class="sel-card" style="display:flex;align-items:center;gap:8px;padding:10px 14px">
+    <div class="card-dot" style="background:var(--violet)"></div>
+    <div style="font-size:11px;font-weight:700;color:var(--text2)">Kesim önünde bekleyen mal yok</div>
+    <div style="font-size:10px;color:var(--text3);margin-left:auto;text-align:right">dokumadan sevk edilen burada görünür</div></div>`
+    +(kapaliHtml?`<div class="card" style="margin-bottom:10px">${kapaliHtml}</div>`:'');
+  const topAd=liste.reduce((s,g)=>s+(g.metreMi?0:g.kalanAd),0),topMt=liste.reduce((s,g)=>s+(g.metreMi?g.kalanMt:0),0);
+  const simdi=Date.now();
+  return `<div class="card" style="margin-bottom:10px">
+    <div class="card-head"><div class="card-dot" style="background:var(--violet)"></div><div class="card-title">Kesim önünde bekleyen</div>
+      <div class="card-count">${liste.length} kalem${topAd?` · ${say(topAd)} ad`:''}${topMt?` · ${say(topMt)} m`:''}</div></div>`
+    +liste.map(g=>{
+      const{sno,firma,etiket}=kesimOnuAd(g.sid,g.ki,g.ornek,g.kumas);
+      const gun=g.bekleyenTs?Math.max(0,Math.floor((simdi-g.bekleyenTs)/86400000)):null;
+      const gunRenk=gun==null?'var(--text3)':(gun>=7?'var(--red)':(gun>=3?'var(--amber)':'var(--text3)'));
+      const gelen=[g.gelenAd?say(g.gelenAd)+' ad':'',g.gelenMt?say(g.gelenMt,1)+' m':'',g.gelenKg?say(g.gelenKg,1)+' kg':''].filter(Boolean).join(' · ');
+      const kesilen=!g.kesilenAd?'—':say(g.kesilenAd)+' ad'+(g.metreMi&&g.kesilenMt?' ≈ '+say(g.kesilenMt,1)+' m':'')+(g.metreMi&&g.metresizAd?' ('+say(g.metresizAd)+' ad: planda metre yok)':'');
+      return `<div onclick="kesimOnuAra('${esc(sno)}')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:800;color:var(--text)">${esc(sno)} <span style="font-weight:600;color:var(--text3);font-size:10px">${esc(firma)}</span></div>
+          <div style="font-size:11px;font-weight:700;color:var(--text2);line-height:1.35">${esc(etiket)}</div>
+          <div style="font-size:9.5px;color:var(--text3);margin-top:2px">gelen ${esc(gelen||'—')} · kesilen ${esc(kesilen)} · <span style="color:${gunRenk};font-weight:700">${gun==null?'':(gun===0?'bugün geldi':gun+' gündür bekliyor')}</span></div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:17px;font-weight:800;color:var(--violet)">${g.metreMi?say(g.kalanMt,1)+' m':say(g.kalanAd)+' ad'}</div>
+          <div style="font-size:8px;color:var(--text3);text-transform:uppercase">bekliyor</div>
+          <button type="button" title="Kesimi bitti — artan mal listeden düşer" onclick="event.stopPropagation();kesimOnuKapat('${esc(g.sid)}',${g.ki})" style="margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:11px;font-weight:700;padding:7px 10px;cursor:pointer;font-family:inherit">✓ Bitti</button>
+        </div>
+      </div>`;
+    }).join('')+kapaliHtml+`</div>`;
+}
+/** Sevkler + kesimler (+ metreyle gelen için kumaş planı) okunur, bekleyen kalemler döner. */
+async function kesimOnuListeOku(force){
+  const[sevkler,ky]=await Promise.all([kesimOnuSevkleriOku(force),konfKyYukle(force)]);
+  /* kumaş planı yalnız adetsiz (metreyle) gelen sevki olan siparişler için okunur */
+  const metreli=[...new Set(sevkler.filter(s=>!(s.ad>0)&&s.mt>0).map(s=>s.sid))];
+  if(metreli.length)await getKdBatch(metreli,'KD_URUN_AGACI');
+  return kesimOnuHesapla(sevkler,ky);
+}
+async function kesimOnuRender(force){
+  const host=document.getElementById('kesim-onu-area');
+  if(!host)return;
+  if(urunAraAsama!=='kesim'){host.innerHTML='';return;}
+  try{
+    const liste=await kesimOnuListeOku(force);
+    if(urunAraAsama!=='kesim')return;
+    host.innerHTML=kesimOnuHtml(liste);
+  }catch(e){
+    host.innerHTML=`<div class="sel-card" style="font-size:11px;color:var(--red)">Kesim önünde bekleyen okunamadı: ${esc(e.message||e)}</div>`;
+  }
+}
+/** Bekleyen satıra dokununca sipariş aranır — kesim adedi o ürünün satırına girilir. */
+function kesimOnuAra(sno){
+  const el=document.getElementById('ua-arama');
+  if(!el)return;
+  el.value=sno;
+  urunAraDegisti();
+  el.scrollIntoView({block:'start',behavior:'smooth'});
 }
 
 /* ================= Yıkama Sevk Fişi ================= */
@@ -3163,11 +3477,16 @@ async function logRevizeKaydet(origId,islem,kalemAd,siparisId){
   const miktar=erpParseExcelNumberExpr(document.getElementById('log-rev-miktar')?.value||0)||0;
   const not=document.getElementById('log-rev-not')?.value||'';
   try{
-    // Orijinal kaydı revize olarak işaretle
-    await sbYaz(()=>sb.from('siparis_akis').update({notlar:JSON.stringify({revize_edildi:true,revize_notu:not})}).eq('id',origId),'Revize');
+    // Orijinal kaydı revize olarak işaretle — içeriği korunur, işaret üstüne eklenir
+    const{data:asil,error:asilHata}=await sb.from('siparis_akis').select('notlar').eq('id',origId).maybeSingle();
+    if(asilHata)throw asilHata;
+    let asilJ={};
+    try{asilJ=JSON.parse(asil?.notlar||'{}')||{};if(typeof asilJ!=='object')asilJ={eski_notlar:String(asil?.notlar||'')};}catch(e){asilJ={eski_notlar:String(asil?.notlar||'')};}
+    const kim=String(currentUser?.display_name||currentUser?.username||'').trim()||'—';
+    await sbYaz(()=>sb.from('siparis_akis').update({notlar:JSON.stringify({...asilJ,revize_edildi:true,revize_notu:not,revize_eden:kim,revize_ts:new Date().toISOString()})}).eq('id',origId),'Revize');
     // Yeni revize kaydı ekle
     const revizeIslem='REVİZE · '+islem;
-    const revizeNot=JSON.stringify({revize_icin:origId,aciklama:not,miktar_guncellendi:miktar});
+    const revizeNot=JSON.stringify({revize_icin:origId,aciklama:not,miktar_guncellendi:miktar,user:kim,kullanici:kim,ts:new Date().toISOString()});
     await akisEkle({
       siparis_id:siparisId,
       islem:revizeIslem,
@@ -3548,6 +3867,7 @@ function switchTab(t,idx){
     setTimeout(()=>{
       const yikamaAcik=document.getElementById('giris-mod-yikama-area')?.style.display!=='none';
       (yikamaAcik?yikamaFisRender():urunAraRender()).catch?.(()=>{});
+      if(!yikamaAcik)kesimOnuRender();
     },0);
   }
   if(t==='girisler' && oncekiAktif!=='girisler'){
@@ -3580,7 +3900,7 @@ async function refreshCurrentView(force){
     }else if(tab==='giris'){
       const yikamaAcik=document.getElementById('giris-mod-yikama-area')?.style.display!=='none';
       if(yikamaAcik)await yikamaFisRender();
-      else await urunAraRender();
+      else{await urunAraRender();await kesimOnuRender(force);}
     }else if(tab==='girisler'){
       await veriGirisleriRender();
     }

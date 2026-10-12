@@ -19,6 +19,21 @@ Görünmez: Dokuma, Dikim, Nakış, Planlama, Maliyet, Depo vb.
 Giriş: ERP kullanıcı adı / şifre (KONFEKSIYON yetkisi gerekir)
 Config: erp-config.js (Supabase)
 
+KESİM ÖNÜNDE BEKLEYEN (12.10.2026) — Üretim → Kesim sekmesinin üstü
+  • Dokuma Depo'dan (ana program ya da dokuma tableti) Konfeksiyon'a sevk
+    edilip henüz kesilmemiş mal; ana programın Kesim ekranıyla AYNI hesap:
+        bekleyen = sevk edilen − o kalemin İLK sevkinden sonra girilen kesim
+    (Devir ve kesimsiz yıkama satırları kesim sayılmaz; 12.10.2026'dan eski
+    sevkler sayılmaz; metreyle gelen kumaşta kesilen adet × kumaş planındaki
+    metre düşülür)
+  • Yalnız hesap — kayıt yazmaz. Kesim sekmesi açılınca, Yenile'de ve buradan
+    kesim girilince hesaplanır. Satıra dokununca o sipariş aranır.
+  • "✓ Bitti" (12.10.2026 akşam): kesim bitti, mal arttıysa (500 gelen / 480
+    kesilen → 20) satır kapatılır, listeden düşer. Kim / ne zaman / kaç artan
+    sevk satırına ve Günlük İşlemler'e yazılır; kesim kaydı değişmez. Altta
+    "Kapatılanlar (son 30 gün)" → "Geri aç". Ana programdaki düğmeyle aynı.
+    Yanlış sevk kapatılmaz, geri alınır (dokuma tableti / ana program).
+
 KİLİTLİ TABLET (12.10.2026) — Dokuma Panel ile aynı düzen
   • Aydınlık tema; karşılama sayfası (saat, pil, internet, 📶 Wi-Fi)
   • Kendini güncelleme: GitHub paketi (node scripts/paket-konfeksiyon-github.js)
