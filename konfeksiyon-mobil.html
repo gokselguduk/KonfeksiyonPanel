@@ -7,16 +7,19 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Konfeksiyon Panel">
-<meta name="theme-color" content="#0f1117">
+<meta name="theme-color" content="#eef0f7">
 <meta name="description" content="Konfeksiyon Panel mobil uygulaması">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" type="image/png" href="./app-icon.png">
 <link rel="apple-touch-icon" href="./app-icon.png">
 <title>Konfeksiyon Panel · Simteks</title>
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<!-- Sürüm SABİT: "@2" her yeni 2.x yayınında kendiliğinden değişiyordu (unpkg); tek bir hatalı sürüm ya da unpkg kesintisi üç platformu aynı anda bozardı. Yükseltmek için bu numarayı elle değiştirip deneyin. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <script src="erp-config.js"></script>
 <style>
-:root{--bg:#0f1117;--surface:#181c27;--surface2:#1e2436;--surface3:#252c3f;--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);--text:#e8eaf0;--text2:#9aa3b8;--text3:#5a6280;--accent:#6366f1;--accent2:#818cf8;--green:#10b981;--amber:#f59e0b;--red:#ef4444;--cyan:#06b6d4;--violet:#8b5cf6;--pink:#ec4899}
+/* 12.10.2026: AYDINLIK tema (kullanıcı: dokumadaki gibi). Konfeksiyon kendi rengini (çivit/mor) korur —
+   iki panel yan yana açılınca hangisi olduğu rengiyle anlaşılsın. Yazı tonları beyaz zeminde okunacak kadar koyu. */
+:root{color-scheme:light;--bg:#eef0f7;--surface:#ffffff;--surface2:#f5f6fb;--surface3:#e8eaf3;--border:rgba(15,23,42,0.10);--border2:rgba(15,23,42,0.18);--text:#0f172a;--text2:#334155;--text3:#64748b;--accent:#4338ca;--accent2:#4338ca;--green:#047857;--amber:#b45309;--red:#dc2626;--cyan:#0e7490;--violet:#6d28d9;--pink:#be185d}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;overflow-x:hidden;width:100%;max-width:100%;margin:0;touch-action:pan-y}
 #login-screen{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1.5rem;background:radial-gradient(ellipse at 50% 0%,rgba(99,102,241,.15) 0%,transparent 60%)}
@@ -37,6 +40,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .topbar-logo{width:30px;height:30px;background:linear-gradient(135deg,var(--accent),var(--violet));border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
 .topbar-title{font-size:14px;font-weight:700;flex:1}
 .logout-btn{background:none;border:1px solid var(--border2);border-radius:8px;color:var(--text3);padding:5px 10px;font-size:11px;cursor:pointer}
+/* Yenile üst çubukta, Çıkış'ın yanında (12.10.2026, Dokuma Panel'deki gibi; eskiden sağ altta yüzen düğmeydi) */
+.yenile-btn{flex-shrink:0;white-space:nowrap;align-items:center;gap:4px;border-color:var(--accent);color:var(--accent2);font-weight:700}
 #app{display:none}
 .tab-bar{display:flex;border-bottom:1px solid var(--border);background:var(--surface);overflow-x:auto;scrollbar-width:none;position:sticky;top:54px;z-index:99}
 .tab-bar::-webkit-scrollbar{display:none}
@@ -61,7 +66,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .tag-amber{background:rgba(245,158,11,.12);color:var(--amber)}
 .tag-red{background:rgba(239,68,68,.12);color:var(--red)}
 .tag-blue{background:rgba(99,102,241,.12);color:var(--accent2)}
-.tag-gray{background:rgba(255,255,255,.06);color:var(--text3)}
+.tag-gray{background:rgba(15,23,42,.06);color:var(--text3)}
 .tag-cyan{background:rgba(6,182,212,.12);color:var(--cyan)}
 .siparis-right{text-align:right;flex-shrink:0}
 .siparis-adet{font-size:17px;font-weight:800}
@@ -145,8 +150,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .empty .icon{font-size:30px;margin-bottom:8px}
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;z-index:9999;display:none;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.3)}
 #toast.show{display:block;animation:toastIn .15s ease}
-#toast.toast-ok{background:rgba(16,185,129,.15);border:1px solid var(--green);color:var(--green)}
-#toast.toast-err{background:rgba(239,68,68,.15);border:1px solid var(--red);color:var(--red)}
+#toast.toast-ok{background:#ecfdf5;border:1px solid var(--green);color:var(--green)}
+#toast.toast-err{background:#fef2f2;border:1px solid var(--red);color:var(--red)}
 #toast.toast-info{background:var(--surface3);border:1px solid var(--border2);color:var(--text2)}
 @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(6px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 .filter-row{display:flex;gap:6px;margin-bottom:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
@@ -162,6 +167,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 @media (max-width: 480px){
   #topbar{padding:0 10px;height:50px;gap:6px}
+  /* Telefonda Yenile + pil + Çıkış sığsın (12.10.2026): başlık yazısı gizlenir, logo yeter */
+  #topbar .tb-baslik{display:none}
   .tab-bar{top:50px}
   .tab-btn{padding:13px 12px;font-size:11px}
   .content{padding:10px}
@@ -201,14 +208,86 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   .content{padding:18px}
   .login-card{max-width:520px}
 }
+/* Karşılama sayfası + pil (kilitli tablet, 12.10.2026 — Dokuma Panel'deki düzenin aynısı) */
+.pil-rozet{font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0}
+#karsilama{position:fixed;inset:0;z-index:9000;display:none;flex-direction:column;align-items:center;justify-content:space-between;padding:28px 24px calc(32px + env(safe-area-inset-bottom));background:radial-gradient(ellipse at 50% 0%,rgba(67,56,202,.16) 0%,transparent 60%),var(--bg);text-align:center;user-select:none;-webkit-user-select:none}
+.ks-ust{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:15px;font-weight:700;color:var(--text2)}
+.ks-ince{font-weight:500;color:var(--text3);font-size:12px}
+.ks-wifi{margin-left:10px;padding:8px 14px;font-size:13px;font-weight:800;border:1px solid var(--accent);border-radius:10px;background:var(--surface);color:var(--accent2);cursor:pointer;font-family:inherit}
+.ks-orta{display:flex;flex-direction:column;align-items:center}
+.ks-logo{height:76px;max-width:260px;object-fit:contain;filter:brightness(0) drop-shadow(0 4px 16px rgba(67,56,202,.25));margin-bottom:14px}
+.ks-baslik{font-size:13px;font-weight:900;letter-spacing:6px;color:var(--text2);text-transform:uppercase}
+.ks-saat{font-size:112px;font-weight:800;line-height:1;margin-top:40px;font-variant-numeric:tabular-nums;letter-spacing:-2px;color:var(--text)}
+.ks-tarih{font-size:20px;color:var(--text2);margin-top:10px}
+.ks-bilgi{margin-top:40px;font-size:15px;color:var(--text2);line-height:1.75;max-width:520px}
+.ks-bilgi strong{color:var(--text)}
+.ks-merhaba{font-size:21px;color:var(--text);margin-bottom:6px}
+.ks-btn{width:100%;max-width:440px;padding:22px;font-size:20px;font-weight:800;border:none;border-radius:16px;color:#fff;background:linear-gradient(135deg,var(--accent),var(--violet));box-shadow:0 8px 28px rgba(67,56,202,.28);cursor:pointer;font-family:inherit}
+.ks-btn:active{transform:scale(.98);opacity:.9}
+@media (max-height:640px){.ks-saat{font-size:72px;margin-top:18px}.ks-bilgi{margin-top:18px}.ks-logo{height:52px}}
+/* Hesap makinesi (kilitli tablet, 12.10.2026): yukarıdan aşağı kaydırınca iner, yukarı kaydırınca kapanır */
+#hm-perde{position:fixed;inset:0;z-index:8400;background:rgba(15,23,42,.35);display:none}
+#hm-perde.acik{display:block}
+#hesap-makinesi{position:fixed;top:0;left:50%;width:min(560px,100%);z-index:8500;transform:translate(-50%,-105%);transition:transform .22s ease;background:var(--surface);border:1px solid var(--border2);border-top:none;border-radius:0 0 20px 20px;box-shadow:0 12px 36px rgba(15,23,42,.25);padding:14px 14px 8px;user-select:none;-webkit-user-select:none;touch-action:none}
+#hesap-makinesi.acik{transform:translate(-50%,0)}
+.hm-ust{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;font-weight:800;letter-spacing:1px;color:var(--text3);text-transform:uppercase}
+.hm-kapat{background:var(--surface2);border:1px solid var(--border2);border-radius:10px;color:var(--text2);font-size:16px;font-weight:800;width:40px;height:36px;cursor:pointer;font-family:inherit}
+.hm-ekran{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:10px 14px;margin-bottom:10px;text-align:right;min-height:96px;display:flex;flex-direction:column;justify-content:flex-end}
+.hm-islem{font-size:18px;color:var(--text3);min-height:24px;word-break:break-all;font-variant-numeric:tabular-nums}
+.hm-sonuc{font-size:44px;font-weight:800;color:var(--text);line-height:1.1;word-break:break-all;font-variant-numeric:tabular-nums}
+.hm-tuslar{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.hm-tuslar button{height:64px;border-radius:14px;border:1px solid var(--border2);background:var(--surface);color:var(--text);font-size:26px;font-weight:700;cursor:pointer;font-family:inherit;touch-action:manipulation}
+.hm-tuslar button:active{transform:scale(.96);background:var(--surface3)}
+.hm-tuslar .hm-op{color:var(--accent2);background:var(--surface2)}
+.hm-tuslar .hm-sil{color:var(--red)}
+.hm-tuslar .hm-esit{background:var(--accent);border-color:var(--accent);color:#fff}
+.hm-tuslar .hm-sifir{grid-column:span 2}
+.hm-tutamac{text-align:center;font-size:11px;color:var(--text3);padding:8px 0 2px}
+.hm-tutamac::before{content:'';display:block;width:56px;height:5px;border-radius:3px;background:var(--border2);margin:0 auto 6px}
 </style>
 </head>
 <body>
 
+<!-- Karşılama: tablet açılınca / ekran kapanıp açılınca önce bu gelir (bkz. karsilamaGoster) -->
+<div id="karsilama" role="dialog" aria-label="Karşılama">
+  <div class="ks-ust"><span id="ks-pil"></span><span id="ks-ag"></span></div>
+  <div class="ks-orta">
+    <img src="https://simtekstekstil.com.tr/resimler/logo.png" alt="Simteks" class="ks-logo">
+    <div class="ks-baslik">Konfeksiyon</div>
+    <div class="ks-saat" id="ks-saat">--:--</div>
+    <div class="ks-tarih" id="ks-tarih"></div>
+    <div class="ks-bilgi" id="ks-bilgi"></div>
+  </div>
+  <button type="button" class="ks-btn" id="ks-btn" onclick="karsilamaKapat()">Başla</button>
+</div>
+
+<!-- Hesap makinesi: yukarıdan aşağı kaydırınca iner, yukarı kaydırınca kapanır (bkz. hmAc) -->
+<div id="hm-perde" onclick="hmKapat()"></div>
+<div id="hesap-makinesi" role="dialog" aria-label="Hesap makinesi">
+  <div class="hm-ust"><span>🧮 Hesap makinesi</span><button type="button" class="hm-kapat" onclick="hmKapat()" aria-label="Kapat">✕</button></div>
+  <div class="hm-ekran"><div class="hm-islem" id="hm-islem"></div><div class="hm-sonuc" id="hm-sonuc">0</div></div>
+  <div class="hm-tuslar">
+    <button type="button" class="hm-sil" onclick="hmTus('C')">C</button>
+    <button type="button" class="hm-op" onclick="hmTus('⌫')">⌫</button>
+    <button type="button" class="hm-op" onclick="hmTus('%')">%</button>
+    <button type="button" class="hm-op" onclick="hmTus('÷')">÷</button>
+    <button type="button" onclick="hmTus('7')">7</button><button type="button" onclick="hmTus('8')">8</button><button type="button" onclick="hmTus('9')">9</button>
+    <button type="button" class="hm-op" onclick="hmTus('×')">×</button>
+    <button type="button" onclick="hmTus('4')">4</button><button type="button" onclick="hmTus('5')">5</button><button type="button" onclick="hmTus('6')">6</button>
+    <button type="button" class="hm-op" onclick="hmTus('−')">−</button>
+    <button type="button" onclick="hmTus('1')">1</button><button type="button" onclick="hmTus('2')">2</button><button type="button" onclick="hmTus('3')">3</button>
+    <button type="button" class="hm-op" onclick="hmTus('+')">+</button>
+    <button type="button" class="hm-sifir" onclick="hmTus('0')">0</button>
+    <button type="button" onclick="hmTus(',')">,</button>
+    <button type="button" class="hm-esit" onclick="hmTus('=')">=</button>
+  </div>
+  <div class="hm-tutamac">Kapatmak için yukarı kaydırın</div>
+</div>
+
 <div id="login-screen">
   <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:2rem">
     <img src="https://simtekstekstil.com.tr/resimler/logo.png" alt="Simteks Logo"
-      style="height:60px;max-width:220px;object-fit:contain;margin-bottom:16px;filter:brightness(0) invert(1) drop-shadow(0 4px 16px rgba(99,102,241,0.3))">
+      style="height:60px;max-width:220px;object-fit:contain;margin-bottom:16px;filter:brightness(0) drop-shadow(0 4px 16px rgba(99,102,241,0.3))">
     <div style="font-size:12px;font-weight:900;letter-spacing:6px;color:var(--text);text-transform:uppercase;text-align:center;line-height:1.6">
       KONFEKSİYON PANELİ
     </div>
@@ -226,10 +305,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <div id="topbar">
   <img src="https://simtekstekstil.com.tr/resimler/logo.png" alt="Simteks"
-    style="height:28px;max-width:100px;object-fit:contain;flex-shrink:0;filter:brightness(0) invert(1)">
+    style="height:28px;max-width:100px;object-fit:contain;flex-shrink:0;filter:brightness(0)">
   <div style="width:1px;height:18px;background:var(--border2);flex-shrink:0"></div>
-  <div style="font-size:11px;font-weight:900;letter-spacing:3px;color:var(--text);text-transform:uppercase;flex:1">KONFEKSİYON</div>
-  <div style="font-size:11px;color:var(--text3);flex:1;text-align:right" id="user-info"></div>
+  <div class="tb-baslik" style="font-size:11px;font-weight:900;letter-spacing:3px;color:var(--text);text-transform:uppercase;flex:1">KONFEKSİYON</div>
+  <div style="font-size:11px;color:var(--text3);flex:1;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="user-info"></div>
+  <span id="pil-rozet" class="pil-rozet" style="display:none"></span>
+  <button id="yenile-btn" type="button" class="logout-btn yenile-btn" onclick="manuelYenile()" title="Verileri yenile" style="display:none">🔄 Yenile</button>
   <button class="logout-btn" onclick="doLogout()">Çıkış</button>
 </div>
 
@@ -353,7 +434,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 </div>
 
-<button id="yenile-btn" type="button" onclick="manuelYenile()" title="Yenile" style="display:none;position:fixed;bottom:18px;right:18px;width:50px;height:50px;border-radius:50%;background:var(--accent);border:none;color:#fff;font-size:20px;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer;z-index:500;align-items:center;justify-content:center">🔄</button>
 
 <div id="toast"></div>
 
@@ -415,6 +495,135 @@ function coerceSiparisIdForDb(id){
   return id;
 }
 
+/* ── Güvenli okuma / yazma ───────────────────────────────────────────────
+   1) Sunucu tek istekte EN ÇOK 1000 satır verir; .limit(2000) gibi büyük sınır hata vermeden
+      1000'e iner (28.09.2026 canlı ölçüldü). Tamamı gereken okumalar sayfa sayfa çekilir
+      (Dokuma Panel ile aynı). sorguKur her sayfada TAZE bir sorgu üretmeli.
+   2) supabase-js hata olunca FIRLATMAZ, {error} döndürür. Sonucu okunmayan yazma sessizce
+      kaybolur, ekranda yine "kaydedildi" görünürdü. Yazmalar bu yardımcılardan geçer:
+      hata fırlatılır (kullanıcı görür), ağ kopukluğunda birkaç kez yeniden denenir. */
+async function tumSatirlariCek(sorguKur){
+  const SAYFA=1000,tum=[],gorulen=new Set();
+  for(let from=0;from<50000;from+=SAYFA){
+    const{data,error}=await sorguKur().range(from,from+SAYFA-1);
+    if(error)return{data:null,error};
+    for(const r of (data||[])){
+      if(r&&r.id!=null){const k=String(r.id);if(gorulen.has(k))continue;gorulen.add(k);}
+      tum.push(r);
+    }
+    if(!data||data.length<SAYFA)break;
+  }
+  return{data:tum,error:null};
+}
+function agHatasiMi(err){
+  const m=String(err?.message||err||'');
+  return /failed to fetch|networkerror|load failed|network request failed|fetch|timeout|zaman aşımı|\b50[234]\b/i.test(m);
+}
+const beklet=ms=>new Promise(r=>setTimeout(r,ms));
+/** Aynı sonucu veren (id'ye göre update gibi) yazma: hata → yeniden dene, olmazsa fırlat. */
+async function sbYaz(sorguKur,etiket){
+  let son=null;
+  for(let d=0;d<3;d++){
+    let r;
+    try{r=await sorguKur();}catch(e){r={error:e};}
+    if(!r||!r.error)return r;
+    son=r.error;
+    if(!agHatasiMi(son))break;
+    if(d<2)await beklet(700*(d+1)); // son denemeden sonra bekleme yok
+  }
+  throw new Error((etiket?etiket+': ':'')+(son?.message||son||'yazılamadı'));
+}
+/* İŞLEM KAYDI (siparis_akis satırı) — kim/ne zaman izi, yıkama fişi, kalite kaydı.
+   Her satıra benzersiz akis_gid konur: ağ kopunca yeniden denemeden önce satırın sunucuya
+   ulaşıp ulaşmadığı akis_gid ile sorulur, ikiz yazılmaz. (gid adı dokuma girişinin kimliği
+   olarak kullanılıyor — karışmasın diye ayrı ad.) İnternet hiç yoksa satır telefonda
+   bekletilir ve bağlantı gelince gönderilir (Dokuma Panel'deki bekleyen top ile aynı desen).
+   Ağ dışı hata (yetki, geçersiz veri) bekletilmez, fırlatılır. */
+const KONF_BEKLEYEN_KEY='konf_bekleyen_akis_v1';
+function akisGidUret(){return'kp-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);}
+function akisGidEkle(satir){
+  let not;
+  try{not=typeof satir.notlar==='string'?JSON.parse(satir.notlar||'{}'):(satir.notlar||{});}catch(e){not=null;}
+  if(!not||typeof not!=='object'||Array.isArray(not))return{satir,gid:null};
+  if(!not.akis_gid)not={...not,akis_gid:akisGidUret()};
+  return{satir:{...satir,notlar:JSON.stringify(not)},gid:not.akis_gid};
+}
+async function akisGidVarMi(satir,gid){
+  const{data,error}=await sb.from('siparis_akis').select('id')
+    .eq('siparis_id',satir.siparis_id).eq('islem',satir.islem).ilike('notlar',`%"akis_gid":"${gid}"%`).limit(1);
+  if(error)throw error;
+  return !!(data&&data.length);
+}
+async function akisEkle(satirHam,etiket){
+  const{satir,gid}=akisGidEkle(satirHam);
+  let son=null;
+  for(let d=0;d<3;d++){
+    try{
+      if(d>0&&gid&&await akisGidVarMi(satir,gid))return{ok:true};
+      const{error}=await sb.from('siparis_akis').insert([satir]);
+      if(!error)return{ok:true};
+      son=error;
+    }catch(e){son=e;}
+    if(!agHatasiMi(son))break;
+    if(d<2)await beklet(700*(d+1)); // son denemeden sonra bekleme yok
+  }
+  if(gid&&agHatasiMi(son)){
+    bekleyenAkisYaz([...bekleyenAkislar().filter(x=>x.gid!==gid),{gid,etiket:etiket||satir.islem,satir,ts:Date.now()}]);
+    return{ok:true,bekliyor:true};
+  }
+  throw new Error((etiket?etiket+': ':'')+(son?.message||son||'yazılamadı'));
+}
+function bekleyenAkislar(){try{const l=JSON.parse(localStorage.getItem(KONF_BEKLEYEN_KEY)||'[]');return Array.isArray(l)?l:[];}catch(e){return[];}}
+function bekleyenAkisYaz(l){try{localStorage.setItem(KONF_BEKLEYEN_KEY,JSON.stringify(l));}catch(e){}bekleyenAkisSeritCiz();}
+let _bekleyenAkisGonderiliyor=false;
+async function bekleyenAkisGonder(){
+  if(_bekleyenAkisGonderiliyor||!sb||!currentUser||!bekleyenAkislar().length)return;
+  _bekleyenAkisGonderiliyor=true;
+  try{
+    for(const k of bekleyenAkislar()){
+      try{
+        if(!(await akisGidVarMi(k.satir,k.gid))){
+          const{error}=await sb.from('siparis_akis').insert([k.satir]);
+          if(error)throw error;
+        }
+        bekleyenAkisYaz(bekleyenAkislar().filter(x=>x.gid!==k.gid));
+      }catch(e){
+        if(agHatasiMi(e))break; // hâlâ bağlantı yok — sonra tekrar
+        bekleyenAkisYaz(bekleyenAkislar().map(x=>x.gid===k.gid?{...x,hata:String(e?.message||e)}:x));
+      }
+    }
+  }finally{_bekleyenAkisGonderiliyor=false;bekleyenAkisSeritCiz();}
+}
+function bekleyenAkisSeritCiz(){
+  let el=document.getElementById('bekleyen-akis-serit');
+  const l=bekleyenAkislar();
+  if(!l.length){if(el)el.remove();return;}
+  if(!el){
+    el=document.createElement('div');
+    el.id='bekleyen-akis-serit';
+    el.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:64px;z-index:9998;max-width:92vw;padding:8px 12px;border-radius:10px;font-size:12px;font-weight:700;background:rgba(245,158,11,.15);border:1px solid #f59e0b;color:#f59e0b;box-shadow:0 4px 12px rgba(0,0,0,.3);cursor:pointer';
+    el.onclick=()=>bekleyenAkisGonder();
+    document.body.appendChild(el);
+  }
+  const hatali=l.filter(x=>x.hata).length;
+  el.textContent=`📡 ${l.length} kayıt internete gönderilmeyi bekliyor`+(hatali?` · ${hatali} gönderilemedi (${l.find(x=>x.hata).hata})`:'')+' — dokununca tekrar dener';
+}
+window.addEventListener('online',()=>{bekleyenAkisGonder();});
+setInterval(()=>{if(!document.hidden)bekleyenAkisGonder();},30000);
+/* Aktif kullanıcılar (01.10.2026): dakikada bir nabız — ana program yöneticisi kimin hangi sekmede
+   çalıştığını görür. Sunucu en çok ~50 sn'de bir yazar; fonksiyon kurulmamışsa sessizce geçer. */
+let _nabizSon=0;
+function panelKanalIdUret(){return(window.crypto&&crypto.randomUUID)?crypto.randomUUID():'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,12);}let _kanalId=panelKanalIdUret();let _kanalParamYok=false,_kanal=null,_kanalHazir=false,_kanalEkran=null;
+function panelEkran(){return typeof aktifTabId==='function'?String(aktifTabId()||''):'';}
+function panelNabiz(){try{if(!sb||!currentUser)return;const o=JSON.parse(localStorage.getItem('konf_session')||'{}');if(!o.token)return;if(Date.now()-_nabizSon<55000)return;_nabizSon=Date.now();const g={p_token:o.token,p_platform:'KONFEKSIYON_PANEL',p_ekran:panelEkran()};if(!_kanalParamYok)g.p_kanal=_kanalId;sb.rpc('erp_session_nabiz',g).then(r=>{if(r&&r.error&&g.p_kanal&&/PGRST202|could not find/i.test(String(r.error.code)+' '+String(r.error.message))){_kanalParamYok=true;delete g.p_kanal;sb.rpc('erp_session_nabiz',g).then(()=>{},()=>{});}},()=>{});}catch(e){}}
+/* Anlık çevrimiçi: canlı kanalda yalnız rastgele kimlik + cihaz + sekme dolaşır (isim yok); kime ait olduğunu yalnız yönetici eşler */
+function panelKanal(){try{if(!sb||!currentUser||typeof sb.channel!=='function')return;if(!_kanal){_kanal=sb.channel('erp-cevrimici',{config:{presence:{key:_kanalId}}});_kanal.subscribe(d=>{_kanalHazir=d==='SUBSCRIBED';if(_kanalHazir){_kanalEkran=null;panelKanal();panelNabiz();}});return;}if(!_kanalHazir)return;const e=panelEkran();if(e===_kanalEkran)return;_kanalEkran=e;_kanal.track({p:'KONFEKSIYON_PANEL',e,t:Date.now()});}catch(e){}}
+setInterval(panelKanal,4000);
+setInterval(panelNabiz,60000);setTimeout(panelNabiz,5000);
+/* Çıkış (02.10.2026): oturum sunucuda kapanır, cihaz canlı kanaldan hemen düşer ve kimliği yenilenir —
+   ortak telefonda / tablette sonraki kişi öncekinin yerine ayrı görünür, çıkan kişi çevrimiçi kalmaz */
+function panelCikisBildir(){try{const o=JSON.parse(localStorage.getItem('konf_session')||'{}');if(sb&&o.token)sb.rpc('erp_logout',{p_token:o.token}).then(()=>{},()=>{});}catch(e){}try{const k=_kanal;_kanal=null;_kanalHazir=false;_kanalEkran=null;if(k)Promise.resolve().then(()=>k.untrack()).catch(()=>{}).then(()=>{try{sb.removeChannel(k);}catch(e){}});}catch(e){}_kanalId=panelKanalIdUret();_nabizSon=0;}
+
 function normText(v){
   return String(v||'')
     .toLowerCase()
@@ -463,14 +672,14 @@ async function doLogin(){
     const isAdmin=String(user.role||'').toLowerCase()==='admin';
     if(!isAdmin&&!allowed.includes('KONFEKSIYON')){showLoginErr('Konfeksiyon yetkisi yok.');btn.disabled=false;btn.textContent='Giriş Yap';return;}
     currentUser={...user,allowed};
-    localStorage.setItem('konf_session',JSON.stringify({user:currentUser,ts:Date.now()}));
+    localStorage.setItem('konf_session',JSON.stringify({user:currentUser,ts:Date.now(),token:(result&&result.token)||''}));
     startApp();
   }catch(e){showLoginErr('Bağlantı hatası: '+(e.message||e));btn.disabled=false;btn.textContent='Giriş Yap';}
 }
 function normalizeAllowed(r){if(!r)return[];if(Array.isArray(r))return r;try{const j=JSON.parse(r);return Array.isArray(j)?j:[];}catch{return[];}}
 function showLoginErr(m){const el=document.getElementById('login-err');el.textContent=m;el.style.display='block';}
-function doLogout(){localStorage.removeItem('konf_session');localStorage.removeItem(UI_STATE_KEY);currentUser=null;siparisler=[];document.getElementById('app').style.display='none';document.getElementById('topbar').style.display='none';document.getElementById('login-screen').style.display='flex';const yb=document.getElementById('yenile-btn');if(yb)yb.style.display='none';}
-function tryRestoreSession(){try{const r=localStorage.getItem('konf_session');if(!r)return false;const s=JSON.parse(r);if(!s.user||!s.ts)return false;if(Date.now()-s.ts>8*60*60*1000){localStorage.removeItem('konf_session');return false;}currentUser=s.user;return true;}catch{return false;}}
+function doLogout(){if(typeof panelCikisBildir==='function')panelCikisBildir();localStorage.removeItem('konf_session');localStorage.removeItem(UI_STATE_KEY);currentUser=null;siparisler=[];document.getElementById('app').style.display='none';document.getElementById('topbar').style.display='none';document.getElementById('login-screen').style.display='flex';const yb=document.getElementById('yenile-btn');if(yb)yb.style.display='none';}
+function tryRestoreSession(){try{const r=localStorage.getItem('konf_session');if(!r)return false;const s=JSON.parse(r);if(!s.user||!s.ts)return false;if(!s.token){localStorage.removeItem('konf_session');return false;}/* 02.10: anahtarsız eski oturum bir kez girişe düşer — yönetici listesinde isimle görünsün */if(Date.now()-s.ts>8*60*60*1000){localStorage.removeItem('konf_session');return false;}currentUser=s.user;return true;}catch{return false;}}
 
 async function startApp(){
   document.getElementById('login-screen').style.display='none';
@@ -483,6 +692,8 @@ async function startApp(){
   await restoreUiState();
   startLiveSync();
   setTimeout(()=>prefetchKdData(),600);
+  bekleyenAkisSeritCiz();
+  bekleyenAkisGonder();
 }
 
 async function loadSiparisler(){
@@ -492,9 +703,10 @@ async function loadSiparisler(){
     const[sipRes,akisRes]=await Promise.all([
       /* siparis_fotograflar kasten dışlandı: bazı siparişlerde storage yerine base64
          data-url olarak kaydedilmiş, satır başına yüzlerce KB — bu panelde hiç
-         okunmuyor ama select('*') ile tüm tabloyu çekince "statement timeout" veriyordu. */
-      sb.from('siparisler').select('id,created_at,sno,firma,starih,ttarih,notlar,durum,cins,miktar,updated_by,islem_gecmisi,kaynak_birim,atki_renkleri,musteri,uretim_yeri,siparis_grubu,updated_at').order('created_at',{ascending:false}),
-      sb.from('siparis_akis').select('siparis_id').eq('islem','KD_KONFEKSIYON')
+         okunmuyor ama select('*') ile tüm tabloyu çekince "statement timeout" veriyordu.
+         Sayfalı: 1000 siparişi aşınca en eski AÇIK siparişler sessizce düşerdi. */
+      tumSatirlariCek(()=>sb.from('siparisler').select('id,created_at,sno,firma,starih,ttarih,notlar,durum,cins,miktar,updated_by,islem_gecmisi,kaynak_birim,atki_renkleri,musteri,uretim_yeri,siparis_grubu,updated_at').order('created_at',{ascending:false}).order('id',{ascending:false})),
+      tumSatirlariCek(()=>sb.from('siparis_akis').select('siparis_id').eq('islem','KD_KONFEKSIYON').order('id',{ascending:true}))
     ]);
     if(sipRes.error)throw sipRes.error;
     const tumSiparisler=(sipRes.data||[]);
@@ -779,6 +991,27 @@ function collectSiparisNotlari(s){
   return notlar;
 }
 
+/* Sipariş notları + fotoğraflar (açıklamalarıyla) — ana program ve mobil sipariş detayındaki
+   "Sipariş notları" kutusuyla aynı yer ve içerik; mobilden eklenen fotoğraf da burada görünür. */
+function siparisNotFotoBlokHtml(s,ekUrls){
+  const fotolar=siparisFotograflarFromRaw(siparisKayitFotoAlani(s));
+  const bilinen=new Set(fotolar.map(f=>f.src));
+  (ekUrls||[]).forEach(u=>{if(!bilinen.has(u)){bilinen.add(u);fotolar.push({src:u,aciklama:''});}});
+  const not=String(s?.notlar||'').trim();
+  if(!not&&!fotolar.length)return'';
+  return `<div style="margin-top:14px;padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--surface2)">
+    <div style="font-size:13px;font-weight:700;color:var(--text)">📝 Sipariş notları</div>
+    <div style="margin-top:6px;font-size:12px;line-height:1.5;white-space:pre-wrap;color:${not?'var(--text2)':'var(--text3)'}">${not?esc(not):'Yazılı not yok'}</div>
+    ${fotolar.length?`<div style="margin-top:12px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">${fotolar.length} görsel</div>
+    <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${fotolar.map(f=>`<a href="${esc(f.src)}" target="_blank" rel="noopener noreferrer" style="display:block;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface);text-decoration:none">
+        <img src="${esc(f.src)}" alt="Sipariş görseli" loading="lazy" style="width:100%;height:130px;object-fit:cover;display:block">
+        ${f.aciklama?`<div style="padding:7px 9px;font-size:11px;line-height:1.35;color:var(--text2)">${esc(f.aciklama)}</div>`:''}
+      </a>`).join('')}
+    </div>`:''}
+  </div>`;
+}
+
 async function renderModalTab(t){
   const body=document.getElementById('modal-body');const s=selectedSiparis;if(!s)return;
   if(t==='ozet'){
@@ -794,13 +1027,7 @@ async function renderModalTab(t){
     <div class="info-row"><div class="info-key">Durum</div><div class="info-val">${dTag(s.durum)}</div></div>
     <div class="info-row"><div class="info-key">Sipariş Tarihi</div><div class="info-val">${esc(s.starih||'—')}</div></div>
     <div class="info-row"><div class="info-key">Termin</div><div class="info-val">${s.ttarih?`<span class="tag ${terminEtiketSinifi(s.ttarih,s.durum)}">${esc(s.ttarih)}</span>`:'—'}</div></div>
-    ${s.notlar?`<div class="info-row"><div class="info-key">Not</div><div class="info-val" style="max-width:60%;font-size:11px">${esc(s.notlar)}</div></div>`:''}
-    ${urls.length?`<div style="font-size:10px;font-weight:800;letter-spacing:.5px;color:var(--accent2);text-transform:uppercase;margin:16px 0 8px">Ürün Resimleri</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      ${urls.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" style="display:block;background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;text-decoration:none">
-        <img src="${esc(u)}" alt="Sipariş görseli" style="width:100%;height:140px;object-fit:cover;display:block">
-      </a>`).join('')}
-    </div>`:''}`;return;
+    ${siparisNotFotoBlokHtml(s,urls)}`;return;
   }
   if(t==='kalemler'){
     body.innerHTML='<div class="loading"><div class="spinner"></div></div>';
@@ -1088,10 +1315,13 @@ async function veriGirisiKesimKaydet(i){
   const yeniVal=erpParseExcelNumberExpr(document.getElementById(`vg-ad-${i}`)?.value||0);
   if(yeniVal<=0){showToast('Geçerli bir adet girin');return;}
   try{
-    const{data:rows}=await sb.from(KONF_KY_TABLO).select('yikama_sevk_adet').eq('id',e.id).limit(1);
-    const sevk=parseInt(rows?.[0]?.yikama_sevk_adet||0,10)||0;
-    if(yeniVal<sevk){showToast(`Bu satırdan zaten ${sevk} adet yıkamaya sevk edilmiş, ${sevk}'den küçük giremezsiniz`);return;}
-    await konfKyUpdate(e.id,{kesilen_adet:yeniVal});
+    let sevkEngel=0;
+    await konfKySayacYaz(e.id,cur=>{
+      const sevk=parseInt(cur.yikama_sevk_adet||0,10)||0;
+      if(yeniVal<sevk){sevkEngel=sevk;return null;}
+      return{kesilen_adet:yeniVal};
+    });
+    if(sevkEngel){showToast(`Bu satırdan zaten ${sevkEngel} adet yıkamaya sevk edilmiş, ${sevkEngel}'den küçük giremezsiniz`);return;}
     await konfKyYukle(true);
     showToast('✅ Güncellendi');
     await veriGirisleriRender();
@@ -1115,7 +1345,7 @@ async function veriGirisiKaliteKaydet(i){
     let tKK=0;kalemler.forEach((_,idx)=>{tKK+=parseInt((kd['kalem_'+idx]||{}).kk_gecen||0)||0;});
     kd.kk_gecen=tKK;
     await sbKdSet(e.siparisId,'KD_KONFEKSIYON',kd);
-    await sb.from('siparis_akis').update({notlar:JSON.stringify({...e.raw,kk_gecen:yeniVal,duzeltildi:true})}).eq('id',e.id);
+    await sbYaz(()=>sb.from('siparis_akis').update({notlar:JSON.stringify({...e.raw,kk_gecen:yeniVal,duzeltildi:true})}).eq('id',e.id),'Kalite kaydı');
     showToast('✅ Güncellendi');
     await veriGirisleriRender();
   }catch(err){showToast('❌ Güncellenemedi: '+(err.message||err));}
@@ -1146,13 +1376,13 @@ async function veriGirisiFisKaydet(btn,i){
       }
       let kesimsizKalem=Number.isFinite(parseInt(s.kalem_idx,10))?parseInt(s.kalem_idx,10):null;
       for(const d of cozulenKy){
-        const{data:rows}=await sb.from(KONF_KY_TABLO).select('yikama_sevk_adet,kesilen_adet,kaynak,kalem_idx').eq('id',d.id).limit(1);
-        const cur=rows?.[0];
-        if(!cur)continue;
-        if(konfKyKesimsizMi(cur)&&kesimsizKalem==null)kesimsizKalem=parseInt(cur.kalem_idx,10);
-        const yeniSevk=Math.max(0,(parseInt(cur.yikama_sevk_adet||0,10)||0)-(parseInt(d.pay||0,10)||0));
-        const kes=parseInt(cur.kesilen_adet||0,10)||0;
-        await konfKyUpdate(d.id,{yikama_sevk_adet:yeniSevk,durum:yeniSevk<=0?'YIKAMA_BEKLIYOR':(yeniSevk>=kes?'YIKAMADA':'YIKAMA_KISMEN')});
+        /* Okunamayan satır atlanmaz (hata fırlar) — atlansaydı eski pay geri alınmaz, mal yıkamada asılı kalırdı. */
+        await konfKySayacYaz(d.id,cur=>{
+          if(konfKyKesimsizMi(cur)&&kesimsizKalem==null)kesimsizKalem=parseInt(cur.kalem_idx,10);
+          const yeniSevk=Math.max(0,(parseInt(cur.yikama_sevk_adet||0,10)||0)-(parseInt(d.pay||0,10)||0));
+          const kes=parseInt(cur.kesilen_adet||0,10)||0;
+          return{yikama_sevk_adet:yeniSevk,durum:yeniSevk<=0?'YIKAMA_BEKLIYOR':(yeniSevk>=kes?'YIKAMADA':'YIKAMA_KISMEN')};
+        },null,true);
       }
       if(istenenAdet<=0)continue; // 0 girildiyse satır fişten çıkar
       await konfKyYukle(true);
@@ -1173,17 +1403,18 @@ async function veriGirisiFisKaydet(btn,i){
         const pay=Math.min(kalanEkle,p.kalan);
         if(pay<=0)continue;
         const row=(_konfKyCache.rows||[]).find(r=>r.id===p.id);
-        const yeniSevk=(parseInt(row?.yikama_sevk_adet||0,10)||0)+pay;
-        const kes=parseInt(row?.kesilen_adet||0,10)||0;
-        await konfKyUpdate(p.id,{yikama_sevk_adet:yeniSevk,durum:yeniSevk>=kes?'YIKAMADA':'YIKAMA_KISMEN'});
+        await konfKySayacYaz(p.id,cur=>{
+          const yeniSevk=(parseInt(cur.yikama_sevk_adet||0,10)||0)+pay;
+          const kes=parseInt(cur.kesilen_adet||0,10)||0;
+          return{yikama_sevk_adet:yeniSevk,durum:yeniSevk>=kes?'YIKAMADA':'YIKAMA_KISMEN'};
+        },row);
         yeniKy.push({id:p.id,pay});
         kalanEkle-=pay;
       }
       if(kesimsizPay>0){
         const user=currentUser?.display_name||currentUser?.username||'Sistem';
         const ks=await yikamaKesimsizSatirAl({...s,kalem_idx:kesimsizKalem},user);
-        const yeniSevk=(parseInt(ks.yikama_sevk_adet||0,10)||0)+kesimsizPay;
-        await konfKyUpdate(ks.id,{yikama_sevk_adet:yeniSevk,durum:'YIKAMADA'});
+        await konfKySayacYaz(ks.id,cur=>({yikama_sevk_adet:(parseInt(cur.yikama_sevk_adet||0,10)||0)+kesimsizPay,durum:'YIKAMADA'}),ks);
         yeniKy.push({id:ks.id,pay:kesimsizPay,kesimsiz:true});
         uygulanacak+=kesimsizPay;
       }
@@ -1193,10 +1424,10 @@ async function veriGirisiFisKaydet(btn,i){
     }
     const toplamAd=yeniSatirlar.reduce((s,x)=>s+(parseInt(x.adet||0,10)||0),0);
     const yeniKyDeltalar=yeniSatirlar.flatMap(s=>Array.isArray(s.ky)?s.ky:[]);
-    await sb.from('siparis_akis').update({
+    await sbYaz(()=>sb.from('siparis_akis').update({
       kalem_ad:firma,miktar:toplamAd,
       notlar:JSON.stringify({...e.raw,fis_firma:firma,fis_irsaliye:irsaliye,toplam_ad:toplamAd,kalem_say:yeniSatirlar.length,satirlar:yeniSatirlar,ky_deltalar:yeniKyDeltalar})
-    }).eq('id',e.id);
+    }).eq('id',e.id),'Yıkama fişi');
     showToast('✅ Fiş güncellendi');
     await veriGirisleriRender();
   }catch(err){
@@ -1224,19 +1455,19 @@ async function veriGirisiGeriAl(btn,i){
       let tKK=0;kalemler.forEach((_,idx)=>{tKK+=parseInt((kd['kalem_'+idx]||{}).kk_gecen||0)||0;});
       kd.kk_gecen=tKK;
       await sbKdSet(e.siparisId,'KD_KONFEKSIYON',kd);
-      await sb.from('siparis_akis').update({notlar:JSON.stringify({...e.raw,iptal:true})}).eq('id',e.id);
+      await sbYaz(()=>sb.from('siparis_akis').update({notlar:JSON.stringify({...e.raw,iptal:true})}).eq('id',e.id),'Kalite kaydı');
     }else if(e.tip==='yikama_fis'){
       const deltalar=e.raw.ky_deltalar||[];
       for(const d of deltalar){
-        const{data:rows}=await sb.from(KONF_KY_TABLO).select('*').eq('id',d.id).limit(1);
-        const cur=rows?.[0];
-        if(!cur)continue;
-        const yeniSevk=Math.max(0,(parseInt(cur.yikama_sevk_adet||0,10)||0)-(parseInt(d.pay||0,10)||0));
-        const kes=parseInt(cur.kesilen_adet||0,10)||0;
-        await konfKyUpdate(d.id,{yikama_sevk_adet:yeniSevk,durum:yeniSevk<=0?'YIKAMA_BEKLIYOR':(yeniSevk>=kes?'YIKAMADA':'YIKAMA_KISMEN')});
+        /* Okunamayan satır atlanmaz (hata fırlar) — atlansaydı fiş silinir ama mal yıkamada asılı kalırdı. */
+        await konfKySayacYaz(d.id,cur=>{
+          const yeniSevk=Math.max(0,(parseInt(cur.yikama_sevk_adet||0,10)||0)-(parseInt(d.pay||0,10)||0));
+          const kes=parseInt(cur.kesilen_adet||0,10)||0;
+          return{yikama_sevk_adet:yeniSevk,durum:yeniSevk<=0?'YIKAMA_BEKLIYOR':(yeniSevk>=kes?'YIKAMADA':'YIKAMA_KISMEN')};
+        },null,true);
       }
       await konfKyYukle(true);
-      await sb.from('siparis_akis').update({notlar:JSON.stringify({...e.raw,iptal:true})}).eq('id',e.id);
+      await sbYaz(()=>sb.from('siparis_akis').update({notlar:JSON.stringify({...e.raw,iptal:true})}).eq('id',e.id),'Yıkama fişi');
       if(!deltalar.length){
         showToast('✅ Fiş silindi (eski sürüm — stok kaydı otomatik değişmedi)',3200);
         await veriGirisleriRender();
@@ -1319,7 +1550,8 @@ let _konfKyCache={rows:[],ts:0};
 async function konfKyYukle(force){
   if(!force && _konfKyCache.rows.length && (Date.now()-_konfKyCache.ts)<20000)return _konfKyCache.rows;
   try{
-    const{data,error}=await sb.from(KONF_KY_TABLO).select('*').eq('aktif',true);
+    /* Ayda ~580 satır ekleniyor (Eylül 2026: 565 aktif) — tek istek 1000'de kesilir, sayfalı çek. */
+    const{data,error}=await tumSatirlariCek(()=>sb.from(KONF_KY_TABLO).select('*').eq('aktif',true).order('created_at',{ascending:false}).order('id',{ascending:false}));
     if(error)throw error;
     _konfKyCache={rows:data||[],ts:Date.now()};
   }catch(e){console.warn('konfKyYukle',e.message||e);}
@@ -1508,27 +1740,62 @@ async function konfYikamadanDus(siparisId,kalemIdx,adet,opts){
   const user=(opts&&opts.user)||currentUser?.display_name||currentUser?.username||"Sistem";
   for(const r of adaylar){
     if(kalan<=0)break;
-    const sevk=parseInt(r.yikama_sevk_adet,10)||0;
-    const gel=parseInt(r.yikama_gelen_adet,10)||0;
-    const al=Math.min(sevk-gel,kalan);
-    if(al<=0)continue;
-    const yeniGel=gel+al;
+    let al=0;
     try{
-      await konfKyUpdate(r.id,{
-        yikama_gelen_adet:yeniGel,
-        durum:yeniGel>=sevk?"KALITE_BEKLIYOR":"YIKAMA_KISMEN",
-        notlar:JSON.stringify({son_kalite_donus:{adet:al,user,ts:new Date().toISOString(),kaynak:(opts&&opts.kaynak)||"PANEL_KALITE"}})
-      });
-      dusen+=al;kalan-=al;
+      await konfKySayacYaz(r.id,cur=>{
+        const sevk=parseInt(cur.yikama_sevk_adet,10)||0;
+        const gel=parseInt(cur.yikama_gelen_adet,10)||0;
+        al=Math.min(sevk-gel,kalan);
+        if(al<=0)return null;
+        const yeniGel=gel+al;
+        return{
+          yikama_gelen_adet:yeniGel,
+          durum:yeniGel>=sevk?"KALITE_BEKLIYOR":"YIKAMA_KISMEN",
+          notlar:JSON.stringify({son_kalite_donus:{adet:al,user,ts:new Date().toISOString(),kaynak:(opts&&opts.kaynak)||"PANEL_KALITE"}})
+        };
+      },r);
+      if(al>0){dusen+=al;kalan-=al;}
     }catch(e){}
   }
   return dusen;
 }
 
 async function konfKyUpdate(id,patch){
-  const{data,error}=await sb.from(KONF_KY_TABLO).update({...patch,updated_at:new Date().toISOString()}).eq('id',id).select('*').limit(1);
-  if(error)throw error;
+  /* Aynı yamayı tekrar yazmak aynı sonucu verir — ağ kopukluğunda yeniden denenir. */
+  const{data}=await sbYaz(()=>sb.from(KONF_KY_TABLO).update({...patch,updated_at:new Date().toISOString()}).eq('id',id).select('*').limit(1),'Kesim/yıkama kaydı');
   return data?.[0]||null;
+}
+/* SAYAÇ YAZMA — yarış güvenli (ana programdaki konfKySayacYaz ile aynı). Adet "okunan + fark"
+   olarak yazılıyordu; iki cihaz aynı satıra aynı anda yazarsa biri diğerini eziyordu. Yazma
+   koşullu: okunan sayaç değerleri veritabanında hâlâ aynıysa olur; değilse satır tazelenir,
+   hesap tekrarlanır. Ağ koparsa önce satır okunur — sayaçlar hedef değerdeyse yazılmış sayılır
+   (körlemesine tekrar iki kez artırırdı). hesapla(satir) → yama | null (yapılacak iş yok). */
+const KONF_KY_SAYACLAR=['kesilen_adet','yikama_sevk_adet','yikama_gelen_adet'];
+async function konfKySayacYaz(id,hesapla,onbellekSatir,yoksaNull){
+  let cur=onbellekSatir||null,belirsiz=null;
+  for(let d=0;d<6;d++){
+    if(!cur){
+      const{data,error}=await sb.from(KONF_KY_TABLO).select('*').eq('id',id).limit(1);
+      if(error){if(agHatasiMi(error)&&d<5){await beklet(700*(d+1));continue;}throw error;}
+      cur=data?.[0];
+      if(!cur){if(yoksaNull)return null;throw new Error('Kesim/yıkama kaydı bulunamadı');}
+      if(belirsiz&&KONF_KY_SAYACLAR.every(a=>!(a in belirsiz)||(parseInt(cur[a],10)||0)===belirsiz[a]))return cur;
+      belirsiz=null;
+    }
+    const yama=hesapla(cur);
+    if(!yama)return null;
+    let q=sb.from(KONF_KY_TABLO).update({...yama,updated_at:new Date().toISOString()}).eq('id',id);
+    KONF_KY_SAYACLAR.forEach(a=>{if(a in yama)q=q.eq(a,parseInt(cur[a],10)||0);});
+    let sonuc;
+    try{sonuc=await q.select('*');}catch(e){sonuc={error:e};}
+    if(sonuc.error){
+      if(agHatasiMi(sonuc.error)&&d<5){belirsiz=yama;cur=null;await beklet(700*(d+1));continue;}
+      throw sonuc.error;
+    }
+    if(sonuc.data&&sonuc.data.length)return sonuc.data[0];
+    cur=null; // başka cihaz arada yazdı — taze oku, yeniden hesapla
+  }
+  throw new Error('Kayıt başka bir cihazdan sürekli değişiyor ya da bağlantı yok — birkaç saniye sonra tekrar deneyin.');
 }
 
 async function urunAraSatirlariGetir(q){
@@ -1639,14 +1906,60 @@ async function urunAraSatirKaydetKesim(btn,sip,kalemIdx,kalem,val){
   return rota;
 }
 
+/* İKİZ KALİTE UYARISI (D-09, 09.10.2026) — ana programdaki erpKaliteIkizOnay ile aynı kural ve süre:
+   aynı kaleme aynı "kalite geçen" adedi son 15 dakikada (panel KALİTE KONTROL ya da ana program KALITE)
+   girildiyse yazmadan önce veritabanından bakılıp sorulur. Engel değil; onaylanırsa günlük satırı iz taşır.
+   Okunamazsa giriş durmaz. Vazgeçilirse null, yoksa {kalemIdx: iz}. */
+const KALITE_IKIZ_DK=15;
+async function kaliteIkizOnay(siparisId,satirlar){
+  const aday=(satirlar||[]).map(s=>({ki:parseInt(s.kalemIdx,10),adet:parseInt(s.adet,10)||0})).filter(s=>Number.isFinite(s.ki)&&s.ki>=0&&s.adet>0);
+  if(!aday.length||siparisId==null)return{};
+  let data=[];
+  try{
+    const bas=new Date(Date.now()-KALITE_IKIZ_DK*60000).toISOString();
+    const r=await sb.from('siparis_akis').select('id,created_at,islem,miktar,notlar')
+      .eq('siparis_id',coerceSiparisIdForDb(siparisId)).in('islem',['KALITE','KALİTE','KALITE KONTROL','KALİTE KONTROL'])
+      .gte('created_at',bas).limit(200);
+    if(r.error)return{};
+    data=r.data||[];
+  }catch(e){return{};}
+  const not=r=>{try{return JSON.parse(r.notlar||'{}')||{};}catch(e){return{};}};
+  const sip=siparisler.find(s=>String(s.id)===String(siparisId))||{};
+  const kalemler=parseKalemler(sip);
+  const bloklar=[],iz={};
+  aday.forEach(({ki,adet})=>{
+    const es=data.filter(r=>parseInt(not(r).kalem_idx,10)===ki&&(parseInt(r.miktar,10)||0)===adet);
+    if(!es.length)return;
+    const k=kalemler[ki]||{};
+    const ad=[k.ad||k.kod||'Kalem '+(ki+1),k.renk,k.ebat||k.olcu].filter(Boolean).join(' · ');
+    bloklar.push((sip.sno||'')+' · '+ad+'\nGirmek istediğiniz: '+adet+' ad kalite geçen\n'+es.map(r=>{
+      const x=not(r),t=new Date(r.created_at);
+      return '  • '+(Number.isNaN(t.getTime())?'':t.toLocaleString('tr-TR'))+' · '+r.miktar+' ad · '
+        +(/KONTROL/i.test(r.islem)?'Konfeksiyon Panel':'Ana program')+((x.kullanici||x.user)?' · '+(x.kullanici||x.user):'');
+    }).join('\n'));
+    iz[ki]={ts:new Date().toISOString(),ikiz_id:es.map(r=>r.id)};
+  });
+  if(!bloklar.length)return{};
+  const ok=confirm('⚠ AYNI KALEME AYNI KALİTE ADEDİ SON '+KALITE_IKIZ_DK+' DAKİKADA GİRİLMİŞ\n\n'+bloklar.join('\n\n')
+    +'\n\nAynı partiyi ikinci kez giriyorsanız İPTAL edin — yoksa kalite iki kez sayılır.\nGerçekten ayrı bir partiyse TAMAM ile kaydedin.');
+  return ok?iz:null;
+}
+
 /* KALİTE — TEK yazma yolu (Ürün Ara ve Veri Girişi aynı fonksiyonu kullanır).
    Sayı: KD_KONFEKSIYON kalem kk_gecen (+tamir/imha); kim/ne zaman: aynı anda yazılan tek
    'KALİTE KONTROL' satırı (Veri Girişleri listesi ve ana program operasyon günlüğü bunu okur).
-   Kalite yapılan mal yıkamadan dönmüştür: "yıkamada olan"dan düşülür. */
-async function panelKaliteYaz(siparisId,kalemIdx,adetler,kaynak){
+   Kalite yapılan mal yıkamadan dönmüştür: "yıkamada olan"dan düşülür.
+   opts.ikizIz: Veri Girişi ikiz uyarısını bütün kalemler için önceden sordu (null = ikiz yok). */
+async function panelKaliteYaz(siparisId,kalemIdx,adetler,kaynak,opts){
   const n=v=>parseInt(v||0,10)||0;
   const ek={kk_gecen:n(adetler?.kk),tamir:n(adetler?.tamir),imha:n(adetler?.imha)};
   if(!ek.kk_gecen&&!ek.tamir&&!ek.imha)return 0;
+  let ikizIz=opts?opts.ikizIz:undefined;
+  if(ikizIz===undefined){
+    const iz=await kaliteIkizOnay(siparisId,[{kalemIdx,adet:ek.kk_gecen}]);
+    if(iz===null){const e=new Error('İkiz kalite uyarısı — kayıt yapılmadı.');e.ikizIptal=true;throw e;}
+    ikizIz=iz[kalemIdx]||null;
+  }
   const sip=siparisler.find(s=>String(s.id)===String(siparisId));
   const kalemler=parseKalemler(sip||{});
   const kalem=kalemler[kalemIdx]||{};
@@ -1669,9 +1982,10 @@ async function panelKaliteYaz(siparisId,kalemIdx,adetler,kaynak){
     siparis_adet:n(kalem.miktar),birim:kalemBirimEtiket(kalem),
     kk_gecen:ek.kk_gecen,tamir:ek.tamir||undefined,imha:ek.imha||undefined,
     detay:Object.keys(ek).filter(a=>ek[a]).map(a=>`${etiket[a]}: +${ek[a]}`),
-    kaynak:kaynak||'urun_ara',kalem_idx:kalemIdx
+    kaynak:kaynak||'urun_ara',kalem_idx:kalemIdx,
+    ikiz_onaylandi:ikizIz||undefined
   });
-  await sb.from('siparis_akis').insert([{siparis_id:coerceSiparisIdForDb(siparisId),islem:'KALİTE KONTROL',kalem_ad:kalemAdi,miktar:ek.kk_gecen,notlar}]);
+  await akisEkle({siparis_id:coerceSiparisIdForDb(siparisId),islem:'KALİTE KONTROL',kalem_ad:kalemAdi,miktar:ek.kk_gecen,notlar},'Kalite kaydı');
   logTumData=[];
   let yikDus=0;
   if(ek.kk_gecen>0){
@@ -1942,13 +2256,15 @@ async function yikamaFisOlustur(){
           ? await yikamaKesimsizSatirAl(satir,user)
           : (_konfKyCache.rows||[]).find(r=>r.id===p.id);
         const rowId=row?.id??p.id;
-        const yeniSevk=(parseInt(row?.yikama_sevk_adet||0,10)||0)+p.pay;
-        const kes=parseInt(row?.kesilen_adet||0,10)||0;
-        await konfKyUpdate(rowId,{
-          yikama_sevk_adet:yeniSevk,
-          durum:yeniSevk>=kes?'YIKAMADA':'YIKAMA_KISMEN',
-          notlar:JSON.stringify({son_sevk:{adet:p.pay,user,ts:new Date().toISOString(),firma:meta.firma,irsaliye:meta.irsaliye,...(p.kesimsiz?{kesimsiz:true}:{})}})
-        });
+        await konfKySayacYaz(rowId,cur=>{
+          const yeniSevk=(parseInt(cur.yikama_sevk_adet||0,10)||0)+p.pay;
+          const kes=parseInt(cur.kesilen_adet||0,10)||0;
+          return{
+            yikama_sevk_adet:yeniSevk,
+            durum:yeniSevk>=kes?'YIKAMADA':'YIKAMA_KISMEN',
+            notlar:JSON.stringify({son_sevk:{adet:p.pay,user,ts:new Date().toISOString(),firma:meta.firma,irsaliye:meta.irsaliye,...(p.kesimsiz?{kesimsiz:true}:{})}})
+          };
+        },row&&row.id!=null?row:null);
         const d={id:rowId,pay:p.pay,...(p.kesimsiz?{kesimsiz:true}:{})};
         kyDeltalar.push(d);
         satirKy.push(d);
@@ -1956,7 +2272,9 @@ async function yikamaFisOlustur(){
       const kesimsizAd=satir.parcalar.filter(p=>p.kesimsiz).reduce((t,p)=>t+p.pay,0);
       fisSatirlar.push({siparis_id:satir.siparis_id,siparis_sno:satir.siparis_sno,firma:satir.firma,desen:satir.desen,renk:satir.renk,ebat:satir.ebat,kalem_idx:satir.kalem_idx,adet:satir.adetTop,...(kesimsizAd>0?{kesimsiz_adet:kesimsizAd}:{}),ky:satirKy});
     }
-    await sb.from('siparis_akis').insert([{
+    /* Yıkama adetleri tabloya işlendi; fiş belgesi (firma/irsaliye, Geri Al için paylar)
+       akisEkle ile yazılır — ağ koparsa telefonda bekletilir, kaybolmaz. */
+    const fisSonuc=await akisEkle({
       siparis_id:coerceSiparisIdForDb(_yfFisSatirlari[0].siparis_id),
       islem:'YIKAMA_FIS',
       kalem_ad:meta.firma||'Yıkama fişi',
@@ -1966,7 +2284,7 @@ async function yikamaFisOlustur(){
         fis_firma:meta.firma,fis_irsaliye:meta.irsaliye,fis_tarih:meta.tarih,fis_not:meta.not,
         toplam_ad:toplamAd,kalem_say:fisSatirlar.length,satirlar:fisSatirlar,ky_deltalar:kyDeltalar
       })
-    }]);
+    },'Yıkama fişi');
     _sonYikamaFis={meta:{...meta},satirlar:fisSatirlar};
     _yfFisSatirlari=[];
     await konfKyYukle(true);
@@ -1975,7 +2293,9 @@ async function yikamaFisOlustur(){
     document.getElementById('yf-irsaliye').value='';
     document.getElementById('yf-not').value='';
     yikamaFisSonucGoster();
-    showToast(`✅ Fiş kaydedildi — ${toplamAd.toLocaleString('tr-TR')} ad yıkamada.`,3200);
+    showToast(fisSonuc.bekliyor
+      ? `✅ ${toplamAd.toLocaleString('tr-TR')} ad yıkamada — internet yok, fiş belgesi telefonda bekliyor (bağlantı gelince gönderilir)`
+      : `✅ Fiş kaydedildi — ${toplamAd.toLocaleString('tr-TR')} ad yıkamada.`,fisSonuc.bekliyor?5000:3200);
   }catch(e){
     showToast('❌ Fiş kaydı başarısız: '+(e.message||e));
   }
@@ -2557,12 +2877,12 @@ async function logLoadAll(){
   area.innerHTML='<div class="loading"><div class="spinner"></div></div>';
   try{
     const sinceIso=new Date(Date.now()-45*24*60*60*1000).toISOString();
-    const{data,error}=await sb.from('siparis_akis')
+    /* 45 günde ~950 satır (Eylül 2026) — .limit(2000) sessizce 1000'de kesiliyordu, sayfalı çek. */
+    const{data,error}=await tumSatirlariCek(()=>sb.from('siparis_akis')
       .select('id,siparis_id,islem,kalem_ad,miktar,notlar,created_at')
       .not('islem','in','("KD_KONFEKSIYON","KD_DOKUMA","KD_URUN_AGACI")')
       .gte('created_at',sinceIso)
-      .order('created_at',{ascending:false})
-      .limit(2000);
+      .order('created_at',{ascending:false}).order('id',{ascending:false}));
     if(error)throw error;
     const panelSiparisIdSet=new Set(panelSiparisTum.map(s=>String(s.id)));
     logTumData=(data||[]).filter(r=>panelSiparisIdSet.has(String(r.siparis_id)));
@@ -2731,17 +3051,17 @@ async function logRevizeKaydet(origId,islem,kalemAd,siparisId){
   const not=document.getElementById('log-rev-not')?.value||'';
   try{
     // Orijinal kaydı revize olarak işaretle
-    await sb.from('siparis_akis').update({notlar:JSON.stringify({revize_edildi:true,revize_notu:not})}).eq('id',origId);
+    await sbYaz(()=>sb.from('siparis_akis').update({notlar:JSON.stringify({revize_edildi:true,revize_notu:not})}).eq('id',origId),'Revize');
     // Yeni revize kaydı ekle
     const revizeIslem='REVİZE · '+islem;
     const revizeNot=JSON.stringify({revize_icin:origId,aciklama:not,miktar_guncellendi:miktar});
-    await sb.from('siparis_akis').insert([{
+    await akisEkle({
       siparis_id:siparisId,
       islem:revizeIslem,
       kalem_ad:kalemAd||revizeIslem,
       miktar:miktar,
       notlar:revizeNot
-    }]);
+    },'Revize');
     logDuzenleId=null;
     showToast('✅ Revize kaydedildi');
     await logLoadAll();
@@ -2843,6 +3163,16 @@ async function girisKaydet(tip){
         return;
       }
     }
+    /* İkiz kalite uyarısı (D-09): bütün kalemler için yazmadan ÖNCE bir kez sorulur — yarıda kalmasın */
+    let kaliteIkizIz={};
+    if(tip==='kk'){
+      kaliteIkizIz=await kaliteIkizOnay(girisSeciliId,Object.keys(deltaByKalem).map(key=>({kalemIdx:Number(key),adet:parseInt(deltaByKalem[key].kk_gecen||0,10)||0})));
+      if(kaliteIkizIz===null){
+        showToast('Kayıt yapılmadı — aynı kaleme aynı kalite adedi az önce girilmiş',3200);
+        if(btn){btn.disabled=false;btn.textContent=origBtnText||'💾 KAYDET';}
+        return;
+      }
+    }
     await sbKdSet(girisSeciliId,'KD_KONFEKSIYON',kd);
     girisKd={...kd};
 
@@ -2862,7 +3192,7 @@ async function girisKaydet(tip){
             kesilen_adet:d.kesilen,rota,kaynak:'PANEL_VERI_GIRISI',kesim_user:user
           });
         }
-        if(tip==='kk')await panelKaliteYaz(girisSeciliId,i,{kk:d.kk_gecen,tamir:d.tamir,imha:d.imha},'veri_girisi');
+        if(tip==='kk')await panelKaliteYaz(girisSeciliId,i,{kk:d.kk_gecen,tamir:d.tamir,imha:d.imha},'veri_girisi',{ikizIz:kaliteIkizIz[i]||null});
       }
       if(tip==='kesim')await konfKyYukle(true);
       girisKd=await getKd(girisSeciliId,'KD_KONFEKSIYON',true);
@@ -2897,22 +3227,29 @@ async function girisKaydet(tip){
           [logAlan||'miktar']:tip==='kesim'?0:yapilan,
           detay:detayList
         });
-        logPromises.push(sb.from('siparis_akis').insert([{
+        logPromises.push(akisEkle({
           siparis_id:coerceSiparisIdForDb(girisSeciliId),
           islem:islemAdi,
           kalem_ad:kalemAdi,
           miktar:tip==='kesim'?0:yapilan,
           notlar:notlar
-        }]));
+        },'İşlem kaydı'));
       }
     });
-    if(logPromises.length)await Promise.allSettled(logPromises);
+    /* Sayılar KD'ye yazıldı; iz satırı yazılamazsa sessiz geçilmez (ağ yoksa telefonda bekler). */
+    let izHata=null;
+    if(logPromises.length){
+      const sonuc=await Promise.allSettled(logPromises);
+      const hata=sonuc.find(r=>r.status==='rejected');
+      if(hata)izHata=hata.reason?.message||String(hata.reason);
+    }
     // Cache'i temizle ki iş akışı güncellensin
     logTumData=[];
 
     const kdUa = await getKd(girisSeciliId,'KD_URUN_AGACI');
     renderGirisAsamaTabs(kdUa);
-    showToast('Kayıt yapıldı',1800);
+    if(izHata)showToast('❌ Sayılar kaydedildi ama işlem izi yazılamadı: '+izHata,4500);
+    else showToast('Kayıt yapıldı',1800);
   }catch(e){
     if(e&&e.ikizIptal)showToast('Kayıt yapılmadı — aynı ürüne aynı adet zaten girilmiş',3200);
     else showToast('Kayıt başarısız: '+(e?.message||e),2600);
@@ -2920,17 +3257,46 @@ async function girisKaydet(tip){
   if(btn){btn.disabled=false;btn.textContent=origBtnText||'💾 KAYDET';}
 }
 
-function ikiKaliteEkle(i){
+/* 2. KALİTE — anında kaydedilir. Eskiden yalnız ekrandaki kopyaya ekleniyordu; KAYDET
+   veriyi veritabanından yeniden okuduğu için girilen 2. kalite hiçbir zaman yazılmıyordu
+   (28.09.2026: 230 KD kabının hiçbirinde panel 2. kalitesi yok). Model ana programla aynı:
+   kalem iki_kalite (+ sebep dökümü iki_kalite_detay) ve KALITE_HATALI işlem kaydı. */
+async function ikiKaliteEkle(i){
   const sebep=document.getElementById('kk2-sebep-'+i)?.value||'diger';
   const adet=erpParseExcelNumberExpr(document.getElementById('kk2-adet-'+i)?.value||0);
-  if(!adet){showToast('Adet giriniz');return;}
-  if(!girisKd['kalem_'+i])girisKd['kalem_'+i]={};
-  const kk=girisKd['kalem_'+i];
-  if(!kk.iki_kalite_detay)kk.iki_kalite_detay={};
-  kk.iki_kalite_detay[sebep]=(parseInt(kk.iki_kalite_detay[sebep]||0)||0)+adet;
-  kk.iki_kalite=Object.values(kk.iki_kalite_detay).reduce((a,v)=>a+(parseInt(v)||0),0);
-  if(document.getElementById('kk2-adet-'+i))document.getElementById('kk2-adet-'+i).value='';
-  showToast('✅ 2. Kalite eklendi: '+sebep+' +'+adet);
+  if(!adet||adet<0){showToast('Adet giriniz');return;}
+  if(!girisSeciliId)return;
+  const n=v=>parseInt(v||0,10)||0;
+  try{
+    const kd=await getKd(girisSeciliId,'KD_KONFEKSIYON',true);
+    const kalem=(girisKalemler||[])[i]||{};
+    const sip=siparisler.find(s=>String(s.id)===String(girisSeciliId))||{};
+    const k0=kd['kalem_'+i]||{};
+    const kkSimdi=n(k0.kk_gecen)+n(k0.tamir)+n(k0.imha)+n(k0.iki_kalite);
+    if(!siparisAsimKontrol([{sno:sip.sno||'',kalem,asama:'Kalite',onceki:kkSimdi,eklenen:adet}])){showToast('Kayıt yapılmadı');return;}
+    if(!kd['kalem_'+i])kd['kalem_'+i]={};
+    const kk=kd['kalem_'+i];
+    if(!kk.iki_kalite_detay)kk.iki_kalite_detay={};
+    kk.iki_kalite_detay[sebep]=n(kk.iki_kalite_detay[sebep])+adet;
+    kk.iki_kalite=n(kk.iki_kalite)+adet; // detaysız eski 2. kalite silinmesin diye toplamdan değil, üstüne eklenir
+    let tKK=0,tH=0;
+    parseKalemler(sip).forEach((_,x)=>{const y=kd['kalem_'+x]||{};tKK+=n(y.kk_gecen);tH+=n(y.iki_kalite)+n(y.tamir)+n(y.imha);});
+    kd.hatali_toplam=tH;kd.kalite_toplam=tKK+tH;
+    await sbKdSet(girisSeciliId,'KD_KONFEKSIYON',kd);
+    const kalemAdi=[kalem.ad||kalem.kod||'Kalem '+(i+1),kalem.renk,kalem.ebat||kalem.olcu].filter(Boolean).join(' · ');
+    const kullanici=currentUser?.display_name||currentUser?.username||'—';
+    await akisEkle({
+      siparis_id:coerceSiparisIdForDb(girisSeciliId),islem:'KALITE_HATALI',kalem_ad:kalemAdi,miktar:adet,
+      notlar:JSON.stringify({kullanici,user:kullanici,urun_ad:kalem.ad||kalem.kod||'',renk:kalem.renk||'',ebat:kalem.ebat||kalem.olcu||'',
+        birim:kalemBirimEtiket(kalem),kalem_idx:i,iki_kalite:adet,tamir:0,imha:0,sebep,kaynak:'KONF_PANEL',
+        ts:new Date().toISOString(),note:'2. kalite ('+sebep+') +'+adet})
+    },'2. kalite kaydı');
+    logTumData=[];
+    girisKd={...kd};
+    if(document.getElementById('kk2-adet-'+i))document.getElementById('kk2-adet-'+i).value='';
+    if(girisAktifAsama)renderAsamaIcerik(girisAktifAsama);
+    showToast('✅ 2. Kalite kaydedildi: '+sebep+' +'+adet);
+  }catch(e){showToast('❌ 2. kalite kaydedilemedi: '+(e.message||e));}
 }
 
 async function getKd(id,tip,forceFresh=false){
@@ -2940,8 +3306,8 @@ async function getKd(id,tip,forceFresh=false){
   if(!forceFresh && kdCache[key]!==undefined && (now-(kdCacheTs[key]||0))<ttlMs)return kdCache[key];
   try{const{data,error}=await sb.from('siparis_akis').select('id,kalem_ad,notlar,created_at').eq('siparis_id',id).eq('islem',tip).order('created_at',{ascending:false}).limit(20);
   if(error)throw error;
-  const c=(data||[]).filter(r=>!r.kalem_ad||String(r.kalem_ad)===String(tip)).map(r=>{try{return JSON.parse(r.notlar||'{}');}catch{return null;}}).filter(Boolean);
-  const v=c[0]||{};kdCache[key]=v;kdCacheTs[key]=Date.now();return v;}catch{return{};}
+  const c=(data||[]).filter(r=>!r.kalem_ad||String(r.kalem_ad)===String(tip)).map(r=>{try{return kdHamKaydet(JSON.parse(r.notlar||'{}'),String(r.notlar||'{}'));}catch{return null;}}).filter(Boolean);
+  const v=c[0]||kdHamKaydet({},'{}');kdCache[key]=v;kdCacheTs[key]=Date.now();return v;}catch{return{};}
 }
 
 /** getKd'nin çoklu-sipariş hâli: Ürün Ara gibi ekranlarda 10-40 farklı sipariş için tek tek
@@ -2962,22 +3328,98 @@ async function getKdBatch(ids,tip){
       const sid=String(r.siparis_id);
       if(bulunan.has(sid))return; // en yeni kayıt zaten alınmış (created_at desc sıralı)
       if(r.kalem_ad && String(r.kalem_ad)!==String(tip))return;
-      let v=null;try{v=JSON.parse(r.notlar||'{}');}catch(e){}
+      let v=null;try{v=kdHamKaydet(JSON.parse(r.notlar||'{}'),String(r.notlar||'{}'));}catch(e){}
       if(!v)return;
       bulunan.add(sid);
       kdCache[tip+'_'+sid]=v;kdCacheTs[tip+'_'+sid]=now;
     });
-    eksik.forEach(id=>{if(!bulunan.has(id)){kdCache[tip+'_'+id]={};kdCacheTs[tip+'_'+id]=now;}});
+    eksik.forEach(id=>{if(!bulunan.has(id)){kdCache[tip+'_'+id]=kdHamKaydet({},'{}');kdCacheTs[tip+'_'+id]=now;}});
   }catch(e){console.warn('getKdBatch',e.message||e);}
 }
 
+/* ── EŞZAMANLI YAZMA KORUMASI (ana programdaki sbKdSet ile aynı kural) ─────────
+   KD bir JSON kabı: "oku → değiştir → hepsini yaz". Arada başka cihaz aynı kaba yazarsa
+   onun değişikliği eziliyordu (panel kalite + masaüstü aynı sipariş). Üç yönlü birleştirme:
+   TABAN (okunan hâl) / BENİM (yeni hâl) / GÜNCEL (veritabanı). Yalnız benim değiştirdiğim
+   alanlar yazılır; sayaçlar farkla toplanır; gid'li dizi öğeleri birleştirilir. Kolon varsa
+   (updated_at) yazma koşulludur: okunduğundan beri değiştiyse taze okunup yeniden birleştirilir. */
+const _kdHam=new WeakMap();
+function kdHamKaydet(n,ham){if(n&&typeof n==='object'&&typeof ham==='string')_kdHam.set(n,ham);return n;}
+function kdDuzNesne(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
+function kdKanonik(v){
+  if(Array.isArray(v))return'['+v.map(kdKanonik).join(',')+']';
+  if(v&&typeof v==='object')return'{'+Object.keys(v).filter(k=>v[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+kdKanonik(v[k])).join(',')+'}';
+  return JSON.stringify(v===undefined?null:v);
+}
+function kdEsit(a,b){if(a===b)return true;if(a==null||b==null||typeof a!=='object'||typeof b!=='object')return false;return kdKanonik(a)===kdKanonik(b);}
+const KD_SAYAC_ADI=/^(kesilen|dikilen|kk_gecen|kolide|tamir|imha|iki_kalite|yikama_sevk|yikama_gelen|sevk_edilen|fire_\w+|\w+_adet|\w+_toplam|toplam_\w+|panel_\w+)$/;
+function kdDiziBirlestir(taban,benim,guncel){
+  const k=x=>(x&&typeof x==='object'&&x.gid)?'g:'+x.gid:'j:'+kdKanonik(x);
+  const tMap=new Map(taban.map(x=>[k(x),x])),bMap=new Map(benim.map(x=>[k(x),x]));
+  const out=[],gorulen=new Set();
+  guncel.forEach(x=>{const kx=k(x);if(gorulen.has(kx))return;if(tMap.has(kx)&&!bMap.has(kx))return;
+    const b=bMap.get(kx),t=tMap.get(kx);out.push(b!==undefined&&t!==undefined&&!kdEsit(b,t)?b:x);gorulen.add(kx);});
+  benim.forEach(x=>{const kx=k(x);if(gorulen.has(kx)||tMap.has(kx))return;out.push(x);gorulen.add(kx);});
+  return out;
+}
+function kdUcYonluBirlestir(taban,benim,guncel,anahtar,ustAnahtar){
+  if(kdEsit(benim,taban))return guncel;
+  if(kdEsit(guncel,taban))return benim;
+  if(kdDuzNesne(benim)&&kdDuzNesne(guncel)){
+    const t=kdDuzNesne(taban)?taban:{},out={};
+    new Set([...Object.keys(guncel),...Object.keys(benim),...Object.keys(t)]).forEach(k=>{
+      const v=kdUcYonluBirlestir(t[k],benim[k],guncel[k],k,anahtar);if(v!==undefined)out[k]=v;});
+    return out;
+  }
+  if(Array.isArray(benim)&&Array.isArray(guncel))return kdDiziBirlestir(Array.isArray(taban)?taban:[],benim,guncel);
+  const sayi=v=>typeof v==='number'&&Number.isFinite(v);
+  if(sayi(benim)&&sayi(guncel)&&(sayi(taban)||taban==null)&&(KD_SAYAC_ADI.test(String(anahtar||''))||/_detay$/.test(String(ustAnahtar||''))))
+    return guncel+(benim-(sayi(taban)?taban:0));
+  return benim;
+}
+let _kdSurumKolonu=null;
+async function kdSatirlariTazeOku(id,tip){
+  const sorgu=kol=>sb.from('siparis_akis').select(kol).eq('siparis_id',id).eq('islem',tip).eq('kalem_ad',tip).order('created_at',{ascending:false}).limit(20);
+  if(_kdSurumKolonu!==false){
+    const r=await sorgu('id,notlar,created_at,updated_at');
+    if(!r.error){_kdSurumKolonu=true;return r;}
+    if(!/updated_at|42703/i.test(String(r.error.message||'')+String(r.error.code||'')))return r;
+    _kdSurumKolonu=false;
+  }
+  return sorgu('id,notlar,created_at');
+}
 async function sbKdSet(id,tip,kd){
-  const json=JSON.stringify(kd);
-  const{data:ex}=await sb.from('siparis_akis').select('id').eq('siparis_id',id).eq('islem',tip).eq('kalem_ad',tip).limit(5);
-  if(ex&&ex.length>0){const{error}=await sb.from('siparis_akis').update({notlar:json,miktar:0}).eq('siparis_id',id).eq('islem',tip).eq('kalem_ad',tip);if(error)throw error;}
-  else{const{error}=await sb.from('siparis_akis').insert([{siparis_id:id,islem:tip,kalem_ad:tip,miktar:0,notlar:json}]);if(error)throw error;}
-  kdCache[tip+'_'+id]=kd;
-  kdCacheTs[tip+'_'+id]=Date.now();
+  const key=tip+'_'+id;
+  const benim=kd||{};
+  const tabanHam=_kdHam.get(benim);
+  let taban=null;if(tabanHam!==undefined){try{taban=JSON.parse(tabanHam||'{}');}catch(e){}}
+  let belirsiz=null,json='';
+  for(let d=0;d<5;d++){
+    const{data:rows,error:okuHata}=await kdSatirlariTazeOku(id,tip);
+    if(okuHata){if(agHatasiMi(okuHata)&&d<4){await beklet(700*(d+1));continue;}throw new Error('Kayıt okunamadı: '+(okuHata.message||okuHata));}
+    const hedef=(rows||[])[0]||null;
+    if(belirsiz!==null&&hedef&&String(hedef.notlar||'')===belirsiz){json=belirsiz;break;} // önceki deneme yerine ulaşmış
+    belirsiz=null;
+    let guncel={};try{guncel=hedef?JSON.parse(hedef.notlar||'{}'):{};}catch(e){}
+    json=JSON.stringify(taban?kdUcYonluBirlestir(taban,benim,guncel):benim); // taban yoksa eski davranış
+    if(!hedef){const{error}=await sb.from('siparis_akis').insert([{siparis_id:id,islem:tip,kalem_ad:tip,miktar:0,notlar:json}]);if(error)throw error;break;}
+    let q=sb.from('siparis_akis').update({notlar:json,miktar:0}).eq('id',hedef.id);
+    if(hedef.updated_at)q=q.eq('updated_at',hedef.updated_at);
+    let sonuc;try{sonuc=await q.select('id');}catch(e){sonuc={error:e};}
+    if(sonuc.error){if(agHatasiMi(sonuc.error)&&d<4){belirsiz=json;await beklet(700*(d+1));continue;}throw sonuc.error;}
+    if(!sonuc.data||!sonuc.data.length){json='';continue;} // başka cihaz arada yazdı — taze oku, yeniden birleştir
+    const digerleri=(rows||[]).slice(1).map(r=>r.id);
+    if(digerleri.length){const{error}=await sb.from('siparis_akis').update({notlar:json,miktar:0}).in('id',digerleri);if(error)console.warn('KD mükerrer satır',error.message||error);}
+    break;
+  }
+  if(!json)throw new Error('Kayıt başka bir cihazdan sürekli değişiyor — birkaç saniye sonra tekrar deneyin.');
+  /* Yazanın nesnesi yazılan hâle getirilir ve yeni taban olur — aynı nesneyle ikinci yazma
+     ilk farkı tekrar eklemesin. */
+  let son={};try{son=JSON.parse(json);}catch(e){}
+  Object.keys(benim).forEach(k=>{delete benim[k];});Object.assign(benim,son);
+  kdHamKaydet(benim,json);
+  kdCache[key]=benim;
+  kdCacheTs[key]=Date.now();
 }
 
 function switchTab(t,idx){
@@ -3033,7 +3475,7 @@ async function refreshCurrentView(force){
   finally{syncBusy=false;}
 }
 
-/* Artık otomatik/arka planda kendiliğinden yenileme YOK — kullanıcı ekranın altındaki
+/* Artık otomatik/arka planda kendiliğinden yenileme YOK — kullanıcı üst çubuktaki
  * 🔄 butonuna basmadan hiçbir liste/veri kendiliğinden yeniden çizilmez. Önceki halde
  * her 15-30 saniyede bir tüm görünüm sessizce yeniden oluşuyordu, bu da "sürekli
  * kendini yeniliyor" şikayetine ve algılanan yavaşlığa yol açıyordu. */
@@ -3044,14 +3486,14 @@ function startLiveSync(){
 
 async function manuelYenile(){
   const btn=document.getElementById('yenile-btn');
-  if(btn){btn.disabled=true;btn.style.opacity='.6';btn.textContent='⏳';}
+  if(btn){btn.disabled=true;btn.style.opacity='.6';btn.textContent='⏳ Yenileniyor';}
   try{
     await refreshCurrentView(true);
     showToast('✅ Güncellendi',1200);
   }catch(e){
     showToast('❌ Yenilenemedi: '+(e.message||e));
   }
-  if(btn){btn.disabled=false;btn.style.opacity='1';btn.textContent='🔄';}
+  if(btn){btn.disabled=false;btn.style.opacity='1';btn.textContent='🔄 Yenile';}
 }
 
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
@@ -3119,7 +3561,210 @@ document.addEventListener('focusout',(e)=>{
   }catch{}
 },true);
 
+/* ── Karşılama + pil + kendini güncelleme (kilitli tablet, 12.10.2026) ──────────
+   Dokuma Panel'deki düzenin aynısı. Tablet açılınca / ekran kapanıp açılınca önce karşılama gelir;
+   "Başla" ile panel kaldığı yerden açılır (yarım kalan kutular silinmez). Kilit uygulaması
+   (mobil/dokuma-kiosk, konfeksiyon sürümü) ekran kapanınca window.kioskUyandi'yı çağırır, pili
+   SimteksKiosk.pil() / window.kioskPil ile verir, Wi-Fi ekranını SimteksKiosk.wifiAc() açar.
+   Kilit dışında: dokunmatik cihazda (telefon tarayıcısı) açılışta ve 20 sn'den uzun arka planda
+   kaldıktan sonra; masaüstü tarayıcıda karşılama da pil de yok. VERİ KENDİLİĞİNDEN YENİLENMEZ
+   (bu panelde bilinçli karar) — karşılama yalnız bir örtüdür. */
+const KARSILAMA_VAR=!!window.SimteksKiosk||!!(window.matchMedia&&matchMedia('(pointer:coarse)').matches);
+let _pil=null,_ksSaat=null,_gizlenme=0,_sonEtkilesim=Date.now();
+['pointerdown','keydown','touchstart'].forEach(t=>window.addEventListener(t,()=>{_sonEtkilesim=Date.now();},{passive:true,capture:true}));
+function pilHtml(){
+  if(!_pil||!(_pil.yuzde>=0))return'';
+  const y=Math.round(_pil.yuzde);
+  const renk=_pil.sarj?'var(--green)':(y<20?'var(--red)':(y<40?'var(--amber)':'var(--text2)'));
+  return `<span style="color:${renk}">${_pil.sarj?'⚡':'🔋'} %${y}</span>`;
+}
+function pilCiz(){
+  const h=pilHtml();
+  const r=document.getElementById('pil-rozet');if(r){r.innerHTML=h;r.style.display=h?'':'none';}
+  const k=document.getElementById('ks-pil');if(k)k.innerHTML=h?h+(_pil.sarj?' <span class="ks-ince">şarj oluyor</span>':''):'';
+}
+window.kioskPil=function(yuzde,sarj){_pil={yuzde:+yuzde,sarj:!!sarj};pilCiz();};
+function pilBaslat(){
+  try{
+    if(window.SimteksKiosk&&typeof SimteksKiosk.pil==='function'){const p=JSON.parse(SimteksKiosk.pil()||'{}');if(p.yuzde>=0)kioskPil(p.yuzde,p.sarj);return;}
+    if(KARSILAMA_VAR&&navigator.getBattery)navigator.getBattery().then(b=>{const g=()=>kioskPil(Math.round(b.level*100),b.charging);g();b.addEventListener('levelchange',g);b.addEventListener('chargingchange',g);}).catch(()=>{});
+  }catch(e){}
+}
+function karsilamaAcik(){return document.getElementById('karsilama')?.style.display==='flex';}
+function karsilamaCiz(){
+  const now=new Date();
+  document.getElementById('ks-saat').textContent=now.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('ks-tarih').textContent=now.toLocaleDateString('tr-TR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  /* Wi-Fi tabletten (kilit uygulaması 1.1 SimteksKiosk.wifiAc): Android'in Wi-Fi ekranı açılır, dönünce kilit geri gelir */
+  const wifiVar=!!(window.SimteksKiosk&&typeof SimteksKiosk.wifiAc==='function');
+  document.getElementById('ks-ag').innerHTML=(navigator.onLine!==false?'<span style="color:var(--green)">● İnternet bağlı</span>':'<span style="color:var(--red)">● İnternet yok</span>')
+    +(wifiVar?'<button type="button" class="ks-wifi" onclick="SimteksKiosk.wifiAc()">📶 Wi-Fi</button>'
+      /* Eski kilit uygulaması (köprü yok) Android WebView'da: düğme neden yok, söylensin */
+      :(/; wv\)/.test(navigator.userAgent)?'<span class="ks-ince" style="margin-left:10px">Wi-Fi düğmesi için tablet uygulaması güncellenmeli</span>':''));
+  pilCiz();
+  const b=document.getElementById('ks-bilgi'),btn=document.getElementById('ks-btn');
+  if(currentUser){
+    const bek=typeof bekleyenAkislar==='function'?bekleyenAkislar().length:0;
+    b.innerHTML=`<div class="ks-merhaba">Merhaba, <strong>${esc(currentUser.display_name||currentUser.username||'')}</strong></div>
+      ${bek?`<div style="color:var(--amber)">${bek} kayıt gönderilmeyi bekliyor — internet gelince gider</div>`:''}`;
+    btn.textContent='Başla';
+  }else{
+    b.innerHTML='<div>Başlamak için kullanıcı adınızla giriş yapın</div>';
+    btn.textContent='Giriş yap';
+  }
+}
+function karsilamaGoster(){
+  setTimeout(yeniSurumKontrol,800);   /* ekran açıldı: yeni panel yüklendiyse şimdi gelsin */
+  if(!KARSILAMA_VAR)return;
+  const el=document.getElementById('karsilama');if(!el)return;
+  try{document.activeElement?.blur?.();}catch(e){}
+  el.style.display='flex';
+  karsilamaCiz();
+  clearInterval(_ksSaat);_ksSaat=setInterval(karsilamaCiz,15000);
+}
+function karsilamaKapat(){
+  const el=document.getElementById('karsilama');if(!el)return;
+  el.style.display='none';clearInterval(_ksSaat);_ksSaat=null;
+  if(!currentUser)setTimeout(()=>document.getElementById('l-user')?.focus(),80);
+}
+window.kioskUyandi=karsilamaGoster;
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){_gizlenme=Date.now();return;}
+  if(!window.SimteksKiosk&&_gizlenme&&Date.now()-_gizlenme>=20000)karsilamaGoster();
+  else if(karsilamaAcik())karsilamaCiz();
+});
+window.addEventListener('online',()=>{if(karsilamaAcik())karsilamaCiz();});
+window.addEventListener('offline',()=>{if(karsilamaAcik())karsilamaCiz();});
+
+/* Yeni sürüm (Dokuma Panel'deki gibi): kilitli tablet sayfayı kendiliğinden yeniden açmıyor. PANEL_SURUM'u
+   GitHub paketi (scripts/paket-konfeksiyon-github.js) içerikten üretir ve surum.json'a yazar. Ekran açılınca
+   ve 10 dk'da bir surum.json (birkaç bayt) okunur; farklıysa ve kimse çalışmıyorsa (60 sn dokunulmamış,
+   klavye açık değil, dolu sayı kutusu yok, kayıt gönderilmiyor) sayfa yeni adresle yenilenir. Bekleyen
+   kayıtlar ve oturum tablette kalır. Aynı sürüm için en çok 10 dk'da bir. Yerelde '__SURUM__' → bakılmaz. */
+const PANEL_SURUM='20261012-25d2dbcb';
+function panelMesgulMu(){
+  if(typeof hmAcik==='function'&&hmAcik())return true;
+  if(Date.now()-_sonEtkilesim<60000)return true;
+  if(typeof girdiKlavyesiKullanimda==='function'&&girdiKlavyesiKullanimda())return true;
+  return[...document.querySelectorAll('input[inputmode="numeric"],input[inputmode="decimal"],textarea')].some(i=>i.offsetParent!==null&&String(i.value||'').trim());
+}
+async function yeniSurumKontrol(){
+  if(PANEL_SURUM.startsWith('__')||location.protocol==='file:'||navigator.onLine===false)return;
+  try{
+    const r=await fetch('surum.json?v='+Date.now(),{cache:'no-store'});
+    if(!r.ok)return;
+    const hedef=String((await r.json())?.surum||'');
+    if(!hedef||hedef===PANEL_SURUM)return;
+    if(panelMesgulMu()||_bekleyenAkisGonderiliyor)return;
+    const anahtar='panel_surum_deneme_'+hedef;
+    const son=parseInt(localStorage.getItem(anahtar)||'0',10)||0;
+    if(Date.now()-son<10*60000)return;
+    localStorage.setItem(anahtar,String(Date.now()));
+    location.replace(location.pathname+'?s='+encodeURIComponent(hedef));
+  }catch(e){}
+}
+setInterval(yeniSurumKontrol,10*60000);
+
+/* ── Hesap makinesi (kilitli tablet, kullanıcı isteği 12.10.2026) ──────────────
+   Ekranın üstünden (üst çubuk hizası) aşağı kaydırınca iner, açıkken yukarı kaydırınca kapanır; ✕ ve arka
+   plana dokunmak da kapatır. Yalnız kilit uygulamasında (SimteksKiosk) — telefon tarayıcısında aşağı çekme
+   sayfa yenilemeyle karışmasın. eval YOK: işlem kendi küçük ayrıştırıcısıyla hesaplanır (× ÷ önce, + − sonra;
+   % = önündeki sayının yüzdesi). Virgül ondalık; sonuç tr-TR biçiminde. Son hesap kapatıp açınca durur. */
+const HM_VAR=!!window.SimteksKiosk;
+let _hmIfade='',_hmBas=null;
+function hmAcik(){return document.getElementById('hesap-makinesi')?.classList.contains('acik');}
+function hmAc(){
+  if(hmAcik())return;
+  try{document.activeElement?.blur?.();}catch(e){}
+  document.getElementById('hesap-makinesi').classList.add('acik');
+  document.getElementById('hm-perde').classList.add('acik');
+  hmCiz();
+}
+function hmKapat(){
+  document.getElementById('hesap-makinesi')?.classList.remove('acik');
+  document.getElementById('hm-perde')?.classList.remove('acik');
+}
+function hmSayiYaz(n){
+  if(!Number.isFinite(n))return'Hata';
+  const y=Math.round(n*1e6)/1e6;
+  return y.toLocaleString('tr-TR',{maximumFractionDigits:6});
+}
+/* "12,5+3×2" → sayı; geçersizse NaN. Sayılar virgüllü, işleçler + − × ÷, % sayının arkasında.
+   Yüzde telefon hesap makinesi gibi: 100−20% = 80 (soldakinin yüzdesi), 200×15% = 30, tek başına 50% = 0,5. */
+function hmHesapla(ifade){
+  const t=[];let i=0;const s=String(ifade||'');
+  while(i<s.length){
+    const c=s[i];
+    if(/[0-9,]/.test(c)){let j=i;while(j<s.length&&/[0-9,]/.test(s[j]))j++;let v=parseFloat(s.slice(i,j).replace(',','.'));if(!Number.isFinite(v))v=0;const p=s[j]==='%';if(p)j++;t.push({v,p});i=j;continue;}
+    if('+−×÷'.includes(c)){t.push(c);i++;continue;}
+    i++;
+  }
+  if(!t.length)return 0;
+  const sayi=x=>x&&typeof x==='object';
+  if(t[0]==='−'&&sayi(t[1])){t[1]={...t[1],v:-t[1].v};t.shift();}
+  while(t.length&&!sayi(t[t.length-1]))t.pop();
+  if(!t.length||!sayi(t[0]))return NaN;
+  /* önce × ÷ (yüzdeli çarpan = /100); toplama zincirinde yüzdeli terim işaretli kalır */
+  const t2=[t[0].p?{v:t[0].v/100,p:false}:t[0]];
+  for(let k=1;k<t.length;k+=2){
+    const op=t[k],b=t[k+1];
+    if(!sayi(b))return NaN;
+    const bv=b.p?b.v/100:b.v;
+    const sonT=t2[t2.length-1];
+    if(op==='×')t2[t2.length-1]={v:sonT.v*bv,p:false};
+    else if(op==='÷'){if(bv===0)return NaN;t2[t2.length-1]={v:sonT.v/bv,p:false};}
+    else t2.push(op,b);
+  }
+  let r=t2[0].v;
+  for(let k=1;k<t2.length;k+=2){
+    const b=t2[k+1],bv=b.p?r*b.v/100:b.v;
+    r=t2[k]==='+'?r+bv:r-bv;
+  }
+  return r;
+}
+function hmCiz(){
+  const islem=document.getElementById('hm-islem'),sonuc=document.getElementById('hm-sonuc');
+  if(!islem||!sonuc)return;
+  islem.textContent=_hmIfade;
+  sonuc.textContent=_hmIfade?hmSayiYaz(hmHesapla(_hmIfade)):'0';
+}
+function hmTus(k){
+  const son=_hmIfade.slice(-1);
+  const op='+−×÷';
+  if(k==='C')_hmIfade='';
+  else if(k==='⌫')_hmIfade=_hmIfade.slice(0,-1);
+  else if(k==='='){const r=hmHesapla(_hmIfade);_hmIfade=Number.isFinite(r)?String(Math.round(r*1e6)/1e6).replace('.',','):'';hmCiz();if(!Number.isFinite(r))document.getElementById('hm-sonuc').textContent='Hata';return;}
+  else if(op.includes(k)){
+    if(!_hmIfade){if(k==='−')_hmIfade='−';}
+    else if(op.includes(son))_hmIfade=_hmIfade.slice(0,-1)+k;
+    else if(son!==',')_hmIfade+=k;
+  }
+  else if(k==='%'){if(/[0-9]/.test(son))_hmIfade+='%';}
+  else if(k===','){const parca=_hmIfade.split(/[+−×÷]/).pop();if(!parca.includes(',')&&!parca.includes('%'))_hmIfade+=(parca===''?'0,':',');}
+  else if(/[0-9]/.test(k)){if(son!=='%')_hmIfade+=k;}
+  hmCiz();
+}
+/* Kaydırma: üst çubuk hizasından (≤ 80 px) başlayıp en az 80 px aşağı → aç; açıkken en az 80 px yukarı → kapat.
+   Yatay kaydırma ve dokunuşlar (tuşlar, düğmeler) tetiklemez. */
+if(HM_VAR){
+  document.addEventListener('touchstart',e=>{
+    if(e.touches.length!==1){_hmBas=null;return;}
+    const t=e.touches[0];
+    _hmBas={x:t.clientX,y:t.clientY,acik:hmAcik()};
+  },{passive:true,capture:true});
+  document.addEventListener('touchend',e=>{
+    const b=_hmBas;_hmBas=null;
+    if(!b||!e.changedTouches.length)return;
+    const t=e.changedTouches[0],dy=t.clientY-b.y,dx=t.clientX-b.x;
+    if(Math.abs(dy)<80||Math.abs(dx)>Math.abs(dy))return;
+    if(!b.acik&&dy>0&&b.y<=80&&!karsilamaAcik())hmAc();
+    else if(b.acik&&dy<0)hmKapat();
+  },{passive:true,capture:true});
+}
+
 window.addEventListener('DOMContentLoaded',()=>{
+  pilBaslat();
+  karsilamaGoster();
   if('serviceWorker' in navigator){
     navigator.serviceWorker.getRegistrations()
       .then(rs=>Promise.all(rs.map(r=>r.unregister())))
@@ -3127,7 +3772,7 @@ window.addEventListener('DOMContentLoaded',()=>{
       .finally(()=>{});
   }
   /* Sekme/uygulama arasında geçiş yapınca (visibilitychange/focus) otomatik yenileme YOK —
-     tek yenileme yolu ekranın altındaki 🔄 butonu. */
+     tek yenileme yolu üst çubuktaki 🔄 Yenile düğmesi. */
   if(!initSB())return;
   if(tryRestoreSession()){
     startApp();

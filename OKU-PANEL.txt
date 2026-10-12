@@ -18,3 +18,11 @@ Görünmez: Dokuma, Dikim, Nakış, Planlama, Maliyet, Depo vb.
 
 Giriş: ERP kullanıcı adı / şifre (KONFEKSIYON yetkisi gerekir)
 Config: erp-config.js (Supabase)
+
+KİLİTLİ TABLET (12.10.2026) — Dokuma Panel ile aynı düzen
+  • Aydınlık tema; karşılama sayfası (saat, pil, internet, 📶 Wi-Fi)
+  • Kendini güncelleme: GitHub paketi (node scripts/paket-konfeksiyon-github.js)
+    sürümü html'e gömer ve surum.json yazar — İKİSİ BİRLİKTE yüklenmeli
+  • Veri kendiliğinden yenilenmez (bilinçli); sayfa yalnız yeni sürümde ve
+    kimse çalışmıyorken yenilenir
+  • Kilit uygulaması: mobil/dokuma-kiosk (konfeksiyon sürümü), bkz. OKU.txt

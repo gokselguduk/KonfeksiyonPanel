@@ -1,0 +1,24 @@
+SIMTEKS KONFEKSİYON PANELİ — GITHUB PAKETİ
+=============================================
+
+Bu klasörün İÇİNDEKİ dosyaları GitHub'a yükleyin (11 dosya — 100 dosya
+sınırının çok altında, web sürükle-bırak sorunsuz çalışır).
+
+İLK KEZ YAPIYORSANIZ
+  1) github.com → New repository (ör. "simteks-konfeksiyon-panel"),
+     Private seçin.
+  2) "uploading an existing file" → bu klasördeki HER ŞEYİ seçip sürükleyin
+     (klasörün kendisini değil, İÇİNDEKİLERİ).
+  3) YAYIN-KURULUM.md dosyasındaki adımlarla Settings → Pages'i açın.
+
+SONRAKİ GÜNCELLEMELER
+  Kod değiştikçe: node scripts/paket-konfeksiyon-github.js çalıştırın,
+  bu klasördeki dosyaları GitHub'daki depoya tekrar sürükleyip üzerine
+  yazdırın (ya da GitHub Desktop kullanıyorsanız Commit + Push). GitHub
+  Pages birkaç dakikada otomatik günceller.
+
+BU PAKETTE YOK (bilerek)
+  erp-config.js → Supabase adresi/anahtarı. Deponuz Private ise bunu ayrıca
+  elle yükleyin (Public depoya KOYMAYIN). Ayrıntı: YAYIN-KURULUM.md.
+
+Boyut: 11 dosya
