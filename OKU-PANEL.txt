@@ -36,8 +36,18 @@ KESİM ÖNÜNDE BEKLEYEN (12.10.2026) — Üretim → Kesim sekmesinin üstü
 
 KİLİTLİ TABLET (12.10.2026) — Dokuma Panel ile aynı düzen
   • Aydınlık tema; karşılama sayfası (saat, pil, internet, 📶 Wi-Fi)
-  • Kendini güncelleme: GitHub paketi (node scripts/paket-konfeksiyon-github.js)
-    sürümü html'e gömer ve surum.json yazar — İKİSİ BİRLİKTE yüklenmeli
-  • Veri kendiliğinden yenilenmez (bilinçli); sayfa yalnız yeni sürümde ve
-    kimse çalışmıyorken yenilenir
+  • Kendini güncelleme (13.10.2026, "iki klasör aynı"): sürüm KAYNAK html'de
+    damgalı, surum.json bu klasörde de durur (npm run sync:mobil yazar);
+    _uretilen/konfeksiyon-panel-github/ ile mobil/konfeksiyon-panel/ AYNI —
+    hangisinden yüklenirse olur (klasörün İÇİNDEKİ bütün dosyalar). Tablet
+    sayfa dosyasının sunucu tarihine + yalnız YENİ damgalı surum.json'a
+    bakar (ekran açılınca, 10 dk'da bir, kimse çalışmıyorken); denemeler
+    seyrekleşir, döngü olmaz. Karşılamanın altında "Sürüm: …" yazar.
+  • Rakamlar kendiliğinden tazelenir (13.10.2026): başka cihazdan girilen
+    kesim / kalite / dokuma 🔄 Yenile'ye basmadan görünür. 10 sn'de bir iki
+    küçük bakış (61 bayt); yalnız değişen satır okunur. Ürün Ara rakamları
+    yerinde değişir (kutu, yazılan sayı, liste oynamaz — yazarken de).
+    Liste baştan ÇİZİLMEZ (eski "sürekli kendini yeniliyor" hâli geri
+    gelmedi). Girişler listesi yalnız kimse yazmıyorken, dakikada en çok
+    bir kez tazelenir.
   • Kilit uygulaması: mobil/dokuma-kiosk (konfeksiyon sürümü), bkz. OKU.txt
