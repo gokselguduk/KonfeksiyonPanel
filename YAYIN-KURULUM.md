@@ -4,10 +4,10 @@ Netlify/Vercel kullanılmıyor. Tamamen GitHub üzerinden, ücretsiz.
 
 ## 1) Paketle ve yükle
 
-1. **`KONFEKSIYON-PANEL-GITHUB-AT.bat`**'a çift tıklayın.
+1. **`araclar\KONFEKSIYON-PANEL-GITHUB-AT.bat`**'a çift tıklayın.
 2. Açılan `_uretilen\konfeksiyon-panel-github\` klasöründeki (erp-config.js
    HARİÇ) tüm dosyaları GitHub'daki deponuza sürükleyin (Commit changes).
-3. **Deponuz Private ise** `erp-config.js`'i de (mobil\konfeksiyon-panel
+3. **Deponuz Private ise** `erp-config.js`'i de (konfeksiyon-panel
    klasöründen) aynı depoya elle sürükleyip yükleyin. Public depoya
    **koymayın**.
 
@@ -28,6 +28,6 @@ https://kullaniciadi.github.io/repo-adi/konfeksiyon-mobil.html
 
 ## Güncelleme
 
-Kod değiştikçe: `KONFEKSIYON-PANEL-GITHUB-AT.bat`'ı tekrar çalıştırıp
+Kod değiştikçe: `araclar\KONFEKSIYON-PANEL-GITHUB-AT.bat`'ı tekrar çalıştırıp
 çıkan dosyaları depoya tekrar sürükleyin (üzerine yazar). GitHub Pages
 birkaç dakikada otomatik günceller.
