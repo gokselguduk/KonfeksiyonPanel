@@ -958,14 +958,15 @@ function ortakKesimOnuKumasKalemleri(plan, ki) {
    Modülün kodu geldiğinde: yapiModulleri'nde hazir: true + yapiOkuyucuSurum bir artar (dört programda birlikte).
    Modüller: M1 sevk okuma + M2 üretim okuma (aşağıda, "KARŞILAŞTIRMA OKUYUCUSU"); M3 stok sayımı yazma (assets/stok-sayim.js,
    anahtar YENI'de yazma kapısı erp_sayim_yaz, KARSILASTIR'da arşiv iki yerden); M4 üretim yazma (dokuma; KARSILASTIR'da kapıya
-   yazmadan sorulur — aşağıda "M4 ÜRETİM YAZMA · DENEME"; yeni yazım kodu henüz yok, yeni: false). */
+   yazmadan sorulur — aşağıda "M4 ÜRETİM YAZMA · DENEME"; yeni yazım kodu henüz yok, yeni: false); M5b depo yazma (ekleme;
+   KARSILASTIR'da kapıya aynı satırlarla deneme — aşağıda "M5b DEPO YAZMA · DENEME"; yeni: false). */
 
 var _yapi = { ortam: null, ayar: null, ayarZaman: 0, ayarYok: false, ayarYokZaman: 0, ayarYukleniyor: null, fark: [], farkGorulen: new Set(),
     farkZ: null, farkDeneme: 0, cihazZaman: 0, zamanlayici: null, geciciKimlik: '' };
 
 /** Bu okuyucunun sürümü. Bir modülün okuma / yazma kodu değişince artar; eşitleme kapatılmadan önce cihaz listesinde
     bütün cihazların bu sayıya ulaştığına bakılır. */
-function yapiOkuyucuSurum() { return 5; }   /* 2: M1 sevk (16.10 gece) · 3: M2 üretim + ortak okuyucu (17.10) · 4: M3 sayım yazma kapısı (17.10) · 5: M4 üretim yazma karşılaştırması (17.10 gece) */
+function yapiOkuyucuSurum() { return 6; }   /* 2: M1 sevk (16.10 gece) · 3: M2 üretim + ortak okuyucu (17.10) · 4: M3 sayım yazma kapısı (17.10) · 5: M4 üretim yazma karşılaştırması (17.10 gece) · 6: M5b depo yazma karşılaştırması (18.10) */
 
 /** Geçiş modülleri (plan sırası). hazir: bu sürümde modülün karşılaştırma / yeni okuma kodu var mı.
     yeni: ekranın yeni sayıya geçiş kodu var mı — yoksa anahtar YENI'ye çevrilse de modül KARSILASTIR çalışır. */
@@ -975,7 +976,7 @@ function yapiModulleri() {
         { k: 'uretim', m: 'M2', ad: 'Üretim sayıları okuma', hazir: true, yeni: false },
         { k: 'stok_sayim', m: 'M3', ad: 'Stok sayımı (pilot yazma)', hazir: true, yeni: true },   /* assets/stok-sayim.js */
         { k: 'uretim_yazma', m: 'M4', ad: 'Üretim yazma (dokuma)', hazir: true, yeni: false },   /* yapiUretimDene */
-        { k: 'depo', m: 'M5', ad: 'Depo ve sevk yazma', hazir: false },
+        { k: 'depo', m: 'M5', ad: 'Depo ve sevk yazma (ekleme)', hazir: true, yeni: false },   /* yapiDepoDene */
         { k: 'fason', m: 'M6', ad: 'Fason ve terbiye', hazir: false },
         { k: 'recete', m: 'M7', ad: 'Ürün ağacı ve kumaş planı', hazir: false },
         { k: 'iplik', m: 'M8', ad: 'İplik', hazir: false },
@@ -1206,6 +1207,69 @@ function yapiUretimDeneSonuc(islem, g, r) {
         ayrinti: { islem, neden, program: g.program || '', kaynak: g.kaynak || '', gid: g.gid || '', metre: g.metre, kg: g.kg, adet: g.adet,
             islem_turu: g.islem || '', istenen: r.istenen || '', atilan: r.atilan || null, giren: r.giren || '',
             ikiz: Array.isArray(r.ikizler) ? r.ikizler.length : 0 }
+    });
+}
+
+/* ═══ M5b DEPO YAZMA · DENEME (karşılaştırma aşaması, 18.10.2026) ═════════════════════════════════════════════════
+   SQL: supabase/yapi-adim/12-stok-hareket-yaz (erp_stok_hareket_yaz; deneme: satırlar gerçekten yazılır, denetlenir, işlem GERİ
+   alınır — hiçbir şey kalmaz). Anahtar 'depo' KARSILASTIR'dayken depo hareketi programda BUGÜNKÜ GİBİ yazılır; yazmadan önce
+   kapıya AYNI satırlarla "bunları kabul edip yazabilir miydin?" diye sorulur. Program en çok 1,5 sn bekler (kapının bakiye
+   denetimi programın yazımından önce bitsin); geç gelen cevapta "stok_yetersiz" fark sayılmaz (kapı az önce yazılan çıkışı da
+   görürdü). Kapı reddederdi ya da bir alanı atardı → fark defteri: anahtar 'ekle|<neden>|<ekran>|<sipariş>|<kalem>|<stok kodu /
+   atılan alanlar>', eski 1 (program yazdı) / yeni 0 (kapı reddederdi) · 2 (kabul ama alan atardı). Ağ hatası / oturum fark
+   sayılmaz; kapı kurulu değilse bu oturumda bir daha sorulmaz; ESKI / YENI'de hiç istek yok. Bağlantı yerleri (ekran):
+   mamul-depo-toplu.js mamulTopluKaydet (MAMUL_DEPO) · stok-kart-desktop.js kumasTopluKaydet (KUMAS), kumasKartStokGirisYaz (KART)
+   · 07 handleSave depo formu (DEPO_HAREKET) · 04 sevkiyatMamulDepoHareketYaz (SEVKIYAT) · 02 dokumaDepoSevkDefterYaz + Genel
+   Depo eşi (DOKUMA_DEPO) · Dokuma Panel ddSevkKaydet (DOKUMA_PANEL) · stok-sayim.js sayimHareketleriYaz (STOK_SAYIM).
+   Ölçüm _yapiDepo.sayac (istek / fark / hata / gec). */
+var _yapiDepo = { kapiYok: false, sayac: { istek: 0, fark: 0, hata: 0, gec: 0 } };
+
+function yapiDepoDeneAcikMi() { return yapiKarsilastirMi('depo') && !_yapiDepo.kapiYok; }
+
+/** ekran: kapının ekran adı; satirlar: programın kumas_stok'a yazacağı satırlar AYNEN. Döner: kapının cevabı (ya da null).
+    Hiç fırlatmaz; programın yazımını değiştirmez (satırların kopyası gönderilir). */
+function yapiDepoDene(ekran, satirlar) {
+    if (!yapiDepoDeneAcikMi() || !Array.isArray(satirlar) || !satirlar.length) return Promise.resolve(null);
+    let liste;
+    try { liste = JSON.parse(JSON.stringify(satirlar)); } catch (e) { return Promise.resolve(null); }
+    const g = { gid: 'd_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10), ekran: String(ekran || ''),
+        program: String((_yapi.ortam && _yapi.ortam.platform) || ''), deneme: true, satirlar: liste };
+    const durum = { gec: false };
+    _yapiDepo.sayac.istek++;
+    const p = yapiRpc('erp_stok_hareket_yaz', { p_istek: g })
+        .then((r) => { try { yapiDepoDeneSonuc(g, r, durum); } catch (e) {} return r; }, () => null);
+    p.durum = durum;
+    return p;
+}
+
+/** Yazımdan hemen önce çağrılır: kapıya sorar, en çok ms (varsayılan 1,5 sn) bekler. Kapalıysa beklemeden döner. */
+async function yapiDepoDeneBekle(ekran, satirlar, ms) {
+    const p = yapiDepoDene(ekran, satirlar);
+    if (!p.durum) return null;
+    const s = await Promise.race([p, new Promise((r) => setTimeout(() => r('__zaman'), ms != null ? ms : 1500))]);
+    if (s === '__zaman') { p.durum.gec = true; return null; }
+    return s;
+}
+
+function yapiDepoDeneSonuc(g, r, durum) {
+    if (!r) return;
+    if (r.err === 'kurulu_degil') { _yapiDepo.kapiYok = true; return; }
+    if (['ag', 'baglanti', 'oturum', 'cevap'].includes(r.err)) { _yapiDepo.sayac.hata++; return; }
+    if (r.err === 'stok_yetersiz' && durum && durum.gec) { _yapiDepo.sayac.gec++; return; }
+    const atilan = r.ok && Array.isArray(r.atilan) && r.atilan.length ? r.atilan : null;
+    const neden = r.ok ? (atilan ? 'atilan' : '') : String(r.err || 'bilinmiyor');
+    if (!neden) return;
+    _yapiDepo.sayac.fark++;
+    const s = (Number.isInteger(r.satir) && g.satirlar[r.satir])
+        || g.satirlar.find((x) => x && x.siparis_id != null && x.siparis_id !== '') || g.satirlar[0] || {};
+    const sid = s.siparis_id != null && s.siparis_id !== '' ? s.siparis_id : null;
+    yapiFarkBildir('depo', ['ekle', neden, g.ekran, sid || '', sid != null && s.kalem_idx != null ? s.kalem_idx : '',
+        atilan ? atilan.join(',') : String(r.stok_kodu || s.stok_kodu || '').slice(0, 40)].join('|'), 1, r.ok ? 2 : 0, {
+        siparis_id: sid, kalem_idx: sid != null ? s.kalem_idx : null,
+        ayrinti: { islem: 'ekle', neden, ekran: g.ekran, program: g.program, gid: g.gid, satir_sayisi: g.satirlar.length,
+            satir: Number.isInteger(r.satir) ? r.satir : null, islem_turu: s.islem_turu || '', kaynak_birim: s.kaynak_birim || '',
+            stok_kodu: s.stok_kodu || '', miktar_mt: s.miktar_mt, miktar_kg: s.miktar_kg, cuval_sayisi: s.cuval_sayisi,
+            detay: r.detay || '', hedef: r.hedef || '', mevcut: r.mevcut, istenen: r.istenen, atilan }
     });
 }
 
@@ -5572,8 +5636,8 @@ window.addEventListener('offline',()=>{if(karsilamaAcik())karsilamaCiz();});
    surum.json yalnız bu sayfadan YENİ damgalıysa dinlenir (zaman > PANEL_ZAMAN): html yüklenip surum.json unutulunca
    eski surum.json tableti boştayken 10 dk'da bir boşuna yeniden yüklüyordu. Aynı hedef için denemeler seyrekleşir
    (10 dk, 20, 40 … en çok 6 saat) — yeniden yükleme döngüsü üretimi durdurmasın. */
-const PANEL_SURUM='20261017-f00433d1';
-const PANEL_ZAMAN=1792270341;
+const PANEL_SURUM='20261018-d56b0af6';
+const PANEL_ZAMAN=1792349396;
 /** Hangi sayfanın açık olduğu tabletten okunabilsin (karşılama sayfasının altında). */
 function panelSurumYazisi(){
   const t=new Date(document.lastModified||'');
