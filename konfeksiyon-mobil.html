@@ -1071,7 +1071,7 @@ var _yapi = { ortam: null, ayar: null, ayarZaman: 0, ayarYok: false, ayarYokZama
 
 /** Bu okuyucunun sürümü. Bir modülün okuma / yazma kodu değişince artar; eşitleme kapatılmadan önce cihaz listesinde
     bütün cihazların bu sayıya ulaştığına bakılır. */
-function yapiOkuyucuSurum() { return 16; }   /* 2: M1 sevk (16.10 gece) · 3: M2 üretim + ortak okuyucu (17.10) · 4: M3 sayım yazma kapısı (17.10) · 5: M4 üretim yazma karşılaştırması (17.10 gece) · 6: M5b depo yazma karşılaştırması (18.10) · 7: Dokuma Depo sevki tek işlem denemesi (M5b 2, 21.10) · 8: depo düzeltme / geri alma denemesi (M5c, 21.10) + M1 ekran geçişi (YENI'de ekran yeni sevki gösterir, 21.10) + M6 fason okuma kıyası / yazma denemesi (21.10) · 9: M7a ürün ağacı okuma kıyası (22.10 gece) · 10: M7b ürün ağacı yazma denemesi (22.10 gece) · 11: M8a iplik okuma kıyası (26.10) · 12: M8b iplik yazma denemesi (28.10) · 13: M8c iplik ekran geçişi (YENI: okuma görünümden, yazma kapıdan; 28.10) · 14: M6 fason ekran geçişi (YENI: okuma v_fason_akis'ten, yazma erp_fason_yaz'dan; 30.10) · 15: M7c ürün ağacı ekran geçişi (YENI: okuma v_urun_agaci_kap'tan, yazma erp_recete_yaz'dan; 30.10) · 16: M8d iplik kapanışı (ham kayıt düzenleyicide iplik yalnız gösterilir, Yapı geçişi penceresi kapanan modülü kilitler; SQL 23 bütün cihazlar ≥16 olmadan kurulmaz; 31.10) */
+function yapiOkuyucuSurum() { return 17; }   /* 2: M1 sevk (16.10 gece) · 3: M2 üretim + ortak okuyucu (17.10) · 4: M3 sayım yazma kapısı (17.10) · 5: M4 üretim yazma karşılaştırması (17.10 gece) · 6: M5b depo yazma karşılaştırması (18.10) · 7: Dokuma Depo sevki tek işlem denemesi (M5b 2, 21.10) · 8: depo düzeltme / geri alma denemesi (M5c, 21.10) + M1 ekran geçişi (YENI'de ekran yeni sevki gösterir, 21.10) + M6 fason okuma kıyası / yazma denemesi (21.10) · 9: M7a ürün ağacı okuma kıyası (22.10 gece) · 10: M7b ürün ağacı yazma denemesi (22.10 gece) · 11: M8a iplik okuma kıyası (26.10) · 12: M8b iplik yazma denemesi (28.10) · 13: M8c iplik ekran geçişi (YENI: okuma görünümden, yazma kapıdan; 28.10) · 14: M6 fason ekran geçişi (YENI: okuma v_fason_akis'ten, yazma erp_fason_yaz'dan; 30.10) · 15: M7c ürün ağacı ekran geçişi (YENI: okuma v_urun_agaci_kap'tan, yazma erp_recete_yaz'dan; 30.10) · 16: M8d iplik kapanışı (ham kayıt düzenleyicide iplik yalnız gösterilir, Yapı geçişi penceresi kapanan modülü kilitler; SQL 23 bütün cihazlar ≥16 olmadan kurulmaz; 31.10) · 17: M9a stok kartı okuma kıyası (31.10) */
 
 /** Geçiş modülleri (plan sırası). hazir: bu sürümde modülün karşılaştırma / yeni okuma kodu var mı.
     yeni: ekranın yeni sayıya geçiş kodu var mı — yoksa anahtar YENI'ye çevrilse de modül KARSILASTIR çalışır. */
@@ -1085,7 +1085,7 @@ function yapiModulleri() {
         { k: 'fason', m: 'M6', ad: 'Fason ve terbiye', hazir: true, yeni: true },   /* yapiFasonOkuKiyas + yapiFasonDene (21.10) · ekran geçişi yapiFasonYaz / yapiFasonOkumaKaynagi (30.10) */
         { k: 'recete', m: 'M7', ad: 'Ürün ağacı ve kumaş planı', hazir: true, yeni: true },   /* yapiReceteKiyasEkle (M7a, 22.10 gece) · ekran geçişi yapiReceteYeniKaplar / yapiReceteYaz (M7c, 30.10) */
         { k: 'iplik', m: 'M8', ad: 'İplik', hazir: true, yeni: true },   /* yapiIplikOkuKiyas (M8a, 26.10) · yapiIplikDene (M8b) · ekran geçişi yapiIplikYaz / yapiIplikOkumaKaynagi (M8c, 28.10) */
-        { k: 'stok_kart', m: 'M9', ad: 'Stok kartları', hazir: false },
+        { k: 'stok_kart', m: 'M9', ad: 'Stok kartları', hazir: true, yeni: false },   /* yapiKartOkuKiyas (M9a, 31.10) */
         { k: 'islem_izi', m: 'M10', ad: 'İşlem izi ve günlük', hazir: false }
     ];
 }
@@ -2275,6 +2275,147 @@ async function yapiIplikYaz(ekran, islemler, ek) {
     if (r && r.err === 'kurulu_degil') { _yapiIplikYaz.kapiYok = true; return { ok: false, kapiYok: true }; }
     if (!r || !r.ok) return { ok: false, hata: yapiIplikHataMetni(r), cevap: r };
     return { ok: true, idler: (r.idler || []).map(String), kodlar: r.kodlar || [], cevap: r };
+}
+
+/* ═══ M9a STOK KARTLARI · OKUMA KIYASI (karşılaştırma aşaması, 31.10.2026) ═══════════════════════════════════════
+   SQL: supabase/yapi-adim/24-kart-tablolari (stok_kart + stok_kart_varyant, eşitleme tetikleyicisi; v_kumas_kutuphanesi = yeni
+   tablolardan kumas_kutuphanesi'nin satır biçimi, paket yeniden kurulmuş). Kararlar docs/M9-STOK-KART-TASLAK.md (K1–K8). Anahtar
+   'stok_kart' KARSILASTIR'dayken MASAÜSTÜNDE (mobil okumaz) kart önbelleği yüklenince (03 erpSyncApplyTableRows) en çok 30 dk'da bir:
+   görünüm programın okuduğu sütunlarla okunur, kart kart EŞDEĞERLİK kuralıyla kıyaslanır — yapiKartNormal = SQL erp_kart_normal (boş =
+   yok, sayı = metni; K3 hem kolonda hem pakette duran alanda kolon doluysa kolon; K6 tek fotoğraf; K7 boş kolonlar / miktar_mt yok;
+   mamülde paketteki açıklama nottan farklıysa ayrı alan). Yalnız iki tarafta da okunmuş sütunlar kıyaslanır (hafif okumada fotoğraf
+   yok). Son 60 sn'de yazılan kart atlanır. Tutmayanlar asıl tablodan ve görünümden TAZE okunup yeniden kıyaslanır: yine tutmazsa fark
+   'oku|<eksik|fazla|icerik>|<id>' (eski 1 / yeni 0 · 1 · 2, ayrıntıda kod ve tutmayan alanlar); tazede tutuyorsa önbellek bayattı (fark
+   değil). Görünüm kurulu değilse oturumda bir daha okunmaz. Programın okuması DEĞİŞMEZ. Yük: yalnız KARSILASTIR'da, masaüstü başına
+   30 dk'da bir ~300 KB (bugün 154 kart, paketler dahil). Ölçüm _yapiKart.sayac. */
+var _yapiKart = { kiyasZaman: 0, kiyasMs: 30 * 60000, tazeMs: 60000, gorunumYok: false,
+    sayac: { kiyas: 0, fark: 0, bayat: 0, hata: 0 } };
+const YAPI_KART_CIFT = ['desen_adi', 'urun_adi', 'kumas_cinsi', 'firma', 'tarak_no', 'tarak_eni', 'atki_sikligi', 'cozgu_no', 'cozgu_cinsi',
+    'ham_en', 'ham_boy', 'ham_gramaj', 'ham_gsm', 'mamul_en', 'mamul_boy', 'mamul_gramaj'];   /* SQL erp_kart_cift_alanlar */
+const YAPI_KART_META_RE = /\[\[KUMAS_META:([A-Za-z0-9+/=]+)\]\]/;
+const YAPI_KART_META_TUM_RE = /\[\[KUMAS_META:[A-Za-z0-9+/=]+\]\]/g;
+
+function yapiKartKiyasAcikMi() {
+    return yapiKarsilastirMi('stok_kart') && !_yapiKart.gorunumYok && !(typeof window !== 'undefined' && window.ERP_MOBIL_LITE);
+}
+function yapiKartKirp(s) { return String(s).replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, ''); }
+/** SQL erp_kart_dolu: boş (yalnız boşluk) → null, dolu AYNEN. */
+function yapiKartDolu(v) { return v == null || yapiKartKirp(v) === '' ? null : String(v); }
+/** SQL erp_kart_jn: boş metin / null / boş dizi / boş nesne yok (undefined), sayı / mantık metin; dizide yer korunur. */
+function yapiKartJn(v, dizide) {
+    if (v === null || v === undefined) return dizide ? null : undefined;
+    if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+    if (typeof v === 'string') return yapiKartKirp(v) === '' ? (dizide ? null : undefined) : v;
+    if (Array.isArray(v)) return v.length ? v.map((x) => yapiKartJn(x, true)) : (dizide ? [] : undefined);
+    const o = {};
+    Object.keys(v).forEach((k) => { const x = yapiKartJn(v[k], false); if (x !== undefined) o[k] = x; });
+    return Object.keys(o).length ? o : (dizide ? {} : undefined);
+}
+/** Kartın eşdeğerlik hâli (SQL erp_kart_normal ile AYNI kural). var_(sütun) verilirse yalnız iki tarafta da okunmuş sütunlar. */
+function yapiKartNormal(r, var_) {
+    const has = (k) => (var_ ? var_(k) : true);
+    const o = {};
+    const koy = (k, v) => { if (v !== undefined && v !== null) o[k] = v; };
+    koy('id', r.id == null ? null : String(r.id));
+    ['stok_kodu', 'desen_kodu', 'kalite', 'kaynak_birim', 'updated_by', 'islem_gecmisi', 'atki_renkleri'].forEach((k) => { if (has(k)) koy(k, yapiKartDolu(r[k])); });
+    ['created_at', 'updated_at'].forEach((k) => { if (has(k) && r[k]) koy(k, Date.parse(r[k])); });
+    if (has('fotograf') && has('fotograf_url')) koy('fotograf', yapiKartDolu(r.fotograf_url) ?? yapiKartDolu(r.fotograf) ?? (has('resim_url') ? yapiKartDolu(r.resim_url) : null));
+    if (!has('notlar')) return o;
+    const notlar = String(r.notlar || '');
+    let j = {};
+    const m = notlar.match(YAPI_KART_META_RE);
+    if (m) { try { j = JSON.parse(decodeURIComponent(escape(atob(m[1])))); } catch (e) { j = {}; } }
+    if (j === null) j = {};
+    else if (typeof j !== 'object' || Array.isArray(j)) j = { _paket: j };
+    const vNot = yapiKartDolu(yapiKartKirp(notlar.replace(YAPI_KART_META_TUM_RE, '')));
+    koy('not', vNot);
+    YAPI_KART_CIFT.forEach((a) => koy(a, (has(a) ? yapiKartDolu(r[a]) : null) ?? yapiKartJn(j[a])));
+    const kalan = {};
+    Object.keys(j).forEach((k) => { if (!YAPI_KART_CIFT.includes(k) && k !== 'aciklama') kalan[k] = j[k]; });
+    const kn = yapiKartJn(kalan);
+    if (kn) Object.keys(kn).forEach((k) => { o[k] = kn[k]; });
+    const pa = yapiKartJn(j.aciklama);
+    if ((pa === undefined ? null : pa) !== vNot) koy('paket_aciklama', pa);
+    return o;
+}
+/** Anahtar sırasından bağımsız metin (kıyas için). */
+function yapiKartKanon(v) {
+    if (Array.isArray(v)) return '[' + v.map(yapiKartKanon).join(',') + ']';
+    if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + yapiKartKanon(v[k])).join(',') + '}';
+    return JSON.stringify(v === undefined ? null : v);
+}
+/** İki kart satırı eşdeğer mi — yalnız iki tarafta da okunmuş sütunlarla. Döner: [] (eşdeğer) ya da tutmayan alanlar. */
+function yapiKartFarkAlanlari(a, b) {
+    const var_ = (k) => Object.prototype.hasOwnProperty.call(a, k) && Object.prototype.hasOwnProperty.call(b, k);
+    const na = yapiKartNormal(a, var_), nb = yapiKartNormal(b, var_);
+    return [...new Set([...Object.keys(na), ...Object.keys(nb)])].filter((k) => yapiKartKanon(na[k]) !== yapiKartKanon(nb[k])).sort();
+}
+
+async function yapiKartOku(tablo, sec, ids) {
+    const c = yapiSb();
+    if (!c || typeof c.from !== 'function') return null;
+    const out = [];
+    try {
+        for (let off = 0; ; off += 1000) {
+            let q = c.from(tablo).select(sec || '*');
+            if (ids) q = q.in('id', ids);
+            const { data, error } = await q.order('id').range(off, off + 999);
+            if (error) { if (yapiRpcYokMu(error)) _yapiKart.gorunumYok = true; else _yapiKart.sayac.hata++; return null; }
+            (data || []).forEach((r) => out.push(r));
+            if (!data || data.length < 1000) break;
+        }
+    } catch (e) {
+        _yapiKart.sayac.hata++;
+        return null;
+    }
+    return out;
+}
+
+/** M9a okuma kıyası: eskiSatirlar = programın kart önbelleği, sutunlar = önbelleğin okunduğu sütun listesi ('*' ya da hafif liste).
+    En çok 30 dk'da bir; hiç fırlatmaz. Döner: { eski, yeni, fark, bayat } ya da null (kapalı / zamanı gelmedi / okunamadı). */
+async function yapiKartOkuKiyas(eskiSatirlar, sutunlar) {
+    if (!yapiKartKiyasAcikMi() || !Array.isArray(eskiSatirlar) || !eskiSatirlar.length) return null;
+    if (Date.now() - _yapiKart.kiyasZaman < _yapiKart.kiyasMs) return null;
+    _yapiKart.kiyasZaman = Date.now();
+    const bas = Date.now();
+    const yeni = await yapiKartOku('v_kumas_kutuphanesi', sutunlar || '*');
+    if (!yeni) return null;
+    _yapiKart.sayac.kiyas++;
+    const sinir = bas - _yapiKart.tazeMs;
+    const taze = (r) => !(Math.max(Date.parse(r.created_at || '') || 0, Date.parse(r.updated_at || '') || 0) <= sinir);
+    const em = new Map(eskiSatirlar.filter((r) => r && r.id != null).map((r) => [String(r.id), r]));
+    const ym = new Map(yeni.map((r) => [String(r.id), r]));
+    const aday = [];
+    em.forEach((r, id) => {
+        const y = ym.get(id);
+        if (taze(r) || (y && taze(y))) return;
+        if (!y) aday.push(id);
+        else if (yapiKartFarkAlanlari(r, y).length) aday.push(id);
+    });
+    ym.forEach((y, id) => { if (!em.has(id) && !taze(y)) aday.push(id); });
+    let farkSay = 0, bayat = 0;
+    if (aday.length) {
+        /* tutmayanlar TAZE (asıl tablo + görünüm, bütün sütunlar): tazede de tutmuyorsa yeni yer hatalı, tutuyorsa önbellek bayattı */
+        const ids = aday.slice(0, 200);
+        const [tz, ty] = await Promise.all([yapiKartOku('kumas_kutuphanesi', '*', ids), yapiKartOku('v_kumas_kutuphanesi', '*', ids)]);
+        if (!tz || !ty) return null;
+        const tm = new Map(tz.map((r) => [String(r.id), r])), tym = new Map(ty.map((r) => [String(r.id), r]));
+        ids.forEach((id) => {
+            const t = tm.get(id), y = tym.get(id);
+            const alanlar = t && y ? yapiKartFarkAlanlari(t, y) : null;
+            if (t ? (alanlar && !alanlar.length) : !y) { bayat++; return; }
+            const tur = !y ? 'eksik' : (!t ? 'fazla' : 'icerik');
+            const x = t || y;
+            farkSay++;
+            yapiFarkBildir('stok_kart', ['oku', tur, id].join('|'), tur === 'fazla' ? 0 : 1, tur === 'eksik' ? 0 : (tur === 'fazla' ? 1 : 2), {
+                siparis_id: null, kalem_idx: null,
+                ayrinti: { islem: 'oku', tur, id, kod: (x && (x.desen_kodu || x.stok_kodu)) || '', alanlar: (alanlar || []).slice(0, 12) }
+            });
+        });
+    }
+    _yapiKart.sayac.fark += farkSay;
+    _yapiKart.sayac.bayat += bayat;
+    return { eski: em.size, yeni: ym.size, fark: farkSay, bayat };
 }
 
 /* ═══ KARŞILAŞTIRMA OKUYUCUSU — M1 sevk · M2 üretim (16–17.10.2026) ════════════════════════════════════════════════
@@ -6934,8 +7075,8 @@ window.addEventListener('offline',()=>{if(karsilamaAcik())karsilamaCiz();});
    surum.json yalnız bu sayfadan YENİ damgalıysa dinlenir (zaman > PANEL_ZAMAN): html yüklenip surum.json unutulunca
    eski surum.json tableti boştayken 10 dk'da bir boşuna yeniden yüklüyordu. Aynı hedef için denemeler seyrekleşir
    (10 dk, 20, 40 … en çok 6 saat) — yeniden yükleme döngüsü üretimi durdurmasın. */
-const PANEL_SURUM='20261031-f863c453';
-const PANEL_ZAMAN=1793448142;
+const PANEL_SURUM='20261031-6c9147c7';
+const PANEL_ZAMAN=1793454229;
 /** Hangi sayfanın açık olduğu tabletten okunabilsin (karşılama sayfasının altında). */
 function panelSurumYazisi(){
   const t=new Date(document.lastModified||'');
