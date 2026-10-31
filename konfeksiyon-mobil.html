@@ -1071,7 +1071,7 @@ var _yapi = { ortam: null, ayar: null, ayarZaman: 0, ayarYok: false, ayarYokZama
 
 /** Bu okuyucunun sürümü. Bir modülün okuma / yazma kodu değişince artar; eşitleme kapatılmadan önce cihaz listesinde
     bütün cihazların bu sayıya ulaştığına bakılır. */
-function yapiOkuyucuSurum() { return 13; }   /* 2: M1 sevk (16.10 gece) · 3: M2 üretim + ortak okuyucu (17.10) · 4: M3 sayım yazma kapısı (17.10) · 5: M4 üretim yazma karşılaştırması (17.10 gece) · 6: M5b depo yazma karşılaştırması (18.10) · 7: Dokuma Depo sevki tek işlem denemesi (M5b 2, 21.10) · 8: depo düzeltme / geri alma denemesi (M5c, 21.10) + M1 ekran geçişi (YENI'de ekran yeni sevki gösterir, 21.10) + M6 fason okuma kıyası / yazma denemesi (21.10) · 9: M7a ürün ağacı okuma kıyası (22.10 gece) · 10: M7b ürün ağacı yazma denemesi (22.10 gece) · 11: M8a iplik okuma kıyası (26.10) · 12: M8b iplik yazma denemesi (28.10) · 13: M8c iplik ekran geçişi (YENI: okuma görünümden, yazma kapıdan; 28.10) */
+function yapiOkuyucuSurum() { return 16; }   /* 2: M1 sevk (16.10 gece) · 3: M2 üretim + ortak okuyucu (17.10) · 4: M3 sayım yazma kapısı (17.10) · 5: M4 üretim yazma karşılaştırması (17.10 gece) · 6: M5b depo yazma karşılaştırması (18.10) · 7: Dokuma Depo sevki tek işlem denemesi (M5b 2, 21.10) · 8: depo düzeltme / geri alma denemesi (M5c, 21.10) + M1 ekran geçişi (YENI'de ekran yeni sevki gösterir, 21.10) + M6 fason okuma kıyası / yazma denemesi (21.10) · 9: M7a ürün ağacı okuma kıyası (22.10 gece) · 10: M7b ürün ağacı yazma denemesi (22.10 gece) · 11: M8a iplik okuma kıyası (26.10) · 12: M8b iplik yazma denemesi (28.10) · 13: M8c iplik ekran geçişi (YENI: okuma görünümden, yazma kapıdan; 28.10) · 14: M6 fason ekran geçişi (YENI: okuma v_fason_akis'ten, yazma erp_fason_yaz'dan; 30.10) · 15: M7c ürün ağacı ekran geçişi (YENI: okuma v_urun_agaci_kap'tan, yazma erp_recete_yaz'dan; 30.10) · 16: M8d iplik kapanışı (ham kayıt düzenleyicide iplik yalnız gösterilir, Yapı geçişi penceresi kapanan modülü kilitler; SQL 23 bütün cihazlar ≥16 olmadan kurulmaz; 31.10) */
 
 /** Geçiş modülleri (plan sırası). hazir: bu sürümde modülün karşılaştırma / yeni okuma kodu var mı.
     yeni: ekranın yeni sayıya geçiş kodu var mı — yoksa anahtar YENI'ye çevrilse de modül KARSILASTIR çalışır. */
@@ -1082,8 +1082,8 @@ function yapiModulleri() {
         { k: 'stok_sayim', m: 'M3', ad: 'Stok sayımı (pilot yazma)', hazir: true, yeni: true },   /* assets/stok-sayim.js */
         { k: 'uretim_yazma', m: 'M4', ad: 'Üretim yazma (dokuma)', hazir: true, yeni: false },   /* yapiUretimDene */
         { k: 'depo', m: 'M5', ad: 'Depo ve sevk yazma (ekleme)', hazir: true, yeni: false },   /* yapiDepoDene */
-        { k: 'fason', m: 'M6', ad: 'Fason ve terbiye', hazir: true, yeni: false },   /* yapiFasonOkuKiyas + yapiFasonDene (21.10) */
-        { k: 'recete', m: 'M7', ad: 'Ürün ağacı ve kumaş planı', hazir: true, yeni: false },   /* yapiReceteKiyasEkle (M7a, 22.10 gece) */
+        { k: 'fason', m: 'M6', ad: 'Fason ve terbiye', hazir: true, yeni: true },   /* yapiFasonOkuKiyas + yapiFasonDene (21.10) · ekran geçişi yapiFasonYaz / yapiFasonOkumaKaynagi (30.10) */
+        { k: 'recete', m: 'M7', ad: 'Ürün ağacı ve kumaş planı', hazir: true, yeni: true },   /* yapiReceteKiyasEkle (M7a, 22.10 gece) · ekran geçişi yapiReceteYeniKaplar / yapiReceteYaz (M7c, 30.10) */
         { k: 'iplik', m: 'M8', ad: 'İplik', hazir: true, yeni: true },   /* yapiIplikOkuKiyas (M8a, 26.10) · yapiIplikDene (M8b) · ekran geçişi yapiIplikYaz / yapiIplikOkumaKaynagi (M8c, 28.10) */
         { k: 'stok_kart', m: 'M9', ad: 'Stok kartları', hazir: false },
         { k: 'islem_izi', m: 'M10', ad: 'İşlem izi ve günlük', hazir: false }
@@ -1264,7 +1264,7 @@ async function yapiRpc(ad, govde, tablolar) {
     if (!token) return { ok: false, err: 'oturum' };
     try {
         const { data, error } = await c.rpc(ad, Object.assign({ p_token: token }, govde || {}));
-        if (error) return { ok: false, err: yapiRpcYokMu(error) ? 'kurulu_degil' : 'ag', mesaj: String(error.message || error) };
+        if (error) return { ok: false, err: yapiRpcYokMu(error) ? 'kurulu_degil' : 'ag', mesaj: String(error.message || error), kod: String(error.code || '') };
         const d = data && typeof data === 'object' ? data : { ok: false, err: 'cevap' };
         if (d.ok && Array.isArray(tablolar) && _yapi.ortam && typeof _yapi.ortam.yayinla === 'function') {
             tablolar.forEach((t) => { try { _yapi.ortam.yayinla(t); } catch (e) {} });
@@ -1610,6 +1610,84 @@ function yapiFasonDeneSonuc(g, r, durum) {
     });
 }
 
+/* ═══ M6 FASON / TERBİYE · EKRAN GEÇİŞİ (anahtar 'fason' YENI, 30.10.2026) ═══════════════════════════════════════════════
+   Karşılaştırmada bir hafta fark 0 (22.10 → 29.10, 85 olay). OKUMA: 12 fasonAkisYukle olayları v_fason_akis'ten okur (siparis_akis'in
+   FASON_* satırıyla aynı biçim: id = akış id'si, created_at, notlar = olayın tam hâli); görünüm okunamazsa oturumda eski tabloya döner.
+   YAZMA: fason motorunun olayları + depo ters kayıtları + Terbiye kumaş dönüşünün Kesim önü satırı TEK kapı isteğinde GERÇEK olarak
+   (erp_fason_yaz, deneme değil — SQL 14): biri düşerse hiçbiri yazılmaz (eski "depo / Kesim önü satırını geri sil" adımı yok); depo bağı
+   (notlar.depo) ve Kesim önü bağı (notlar.konf_gelis) kapıda kurulur, kişi oturumdan. Bağlantı koparsa aynı gid ile bir kez daha
+   sorulur (kapı aynı gid'i ikinci kez yazmaz, ilk yazımın sonucunu döner); sürüm kapısının reddi (ERP_ESKI_SURUM) tekrarlanmaz. Kapı
+   kurulu değilse bu oturumda eski yazıma dönülür. Olaylar yine siparis_akis'e yazılır (eşitleme fason_hareket'e taşır — eski sürümdeki
+   cihaz görmeye devam eder; M6d'de kapanır). Fiyat / ödeme (M6c) değişmez: 12 fasonOlayYaz önce fasonFiyatYolu'ndan geçer, kapıya
+   fiyatsız olay gider. Bağlantı yerleri 12 fasonOlayYaz (tek olay) + fasonKapiYaz (olay + depo + Kesim önü: 12 fasonHareketKaydet /
+   Duzelt / Sil, 20 fasonAgacTopluHareketYaz, 23 terbiyeHareketYaz). Mobil fason yazmaz; tabletlerde fason yok. */
+function yapiFasonYeniMi() { return yapiYeniMi('fason') && !_yapiFason.kapiYok; }
+
+/** 12 fasonAkisYukle: fason olayları hangi tablodan / görünümden okunsun. */
+function yapiFasonOkumaKaynagi() { return yapiYeniMi('fason') && !_yapiFason.gorunumYok ? 'v_fason_akis' : 'siparis_akis'; }
+/** Görünüm okunamadı (kurulu değil): bu oturumda eski tabloya dönülür. */
+function yapiFasonGorunumYok() { _yapiFason.gorunumYok = true; }
+
+/** Kapının ret nedeni → kullanıcıya gösterilecek metin. */
+function yapiFasonHataMetni(r) {
+    const x = r || {};
+    const ne = String(x.neden || '');
+    switch (x.err) {
+        case 'yetki': return 'Bu fason kaydı için yetkiniz yok' + (x.alan ? ` (${x.alan})` : '') + '.';
+        case 'tekrar': case 'cakisma': return 'Bu kayıt zaten yazılmış — liste yenilenince kontrol edin.';
+        case 'yok': return 'Düzeltilecek / silinecek kayıt bulunamadı — liste yenilenince kontrol edin.';
+        case 'silinmis': return 'Bu kayıt bu arada silinmiş.';
+        case 'siparis': return 'Sipariş bulunamadı.';
+        case 'tip': return 'Hareket türü tanınmadı' + (x.tip ? ` (${x.tip})` : '') + '.';
+        case 'dokuma_depo_sevki': return 'Bu gönderim bir Dokuma Depo sevkidir — miktarı ve silmesi Dokuma Depo ekranındaki "Sevk edilenler" listesinden yapılır.';
+        case 'kesim_onu_donusu': return 'Bu dönüş Konfeksiyon’a (Kesim önüne) gitti — miktarı düzeltilmez; kaydı silip doğrusunu yeniden girin.';
+        case 'etiket': case 'bag': return 'Depo / Kesim önü satırı bu kayda bağlanamadı.';
+        case 'miktar': return 'Depo satırının miktarı okunamadı.';
+        case 'kalem_yok': return 'Sipariş kalemi bulunamadı — Kesim önüne yazılmadı.';
+        case 'kumas_gelis': return 'Kesim önü satırı kurala uymuyor.';
+        case 'engel': return ne === 'kapali' ? 'Bu kumaşın kesimi "✓ Bitti" ile kapatılmış — önce Kesim önünde "Kapatılanlar"dan yeniden açın.'
+            : 'Bu kumaşa kesim / kalite / sevk işlenmiş — silinemez.';
+        case 'es': return 'Bu dönüşün Kesim önü satırı duruyor — kayıt Kesim önü satırıyla birlikte silinmeli.';
+        case 'bicim': return 'Kayıt biçimi kapıda reddedildi' + (ne ? ` (${ne})` : '') + '.';
+        case 'yazim': return 'Veritabanı kaydı yazamadı' + (x.detay ? ` (${String(x.detay).slice(0, 120)})` : '') + ' — hiçbir parça yazılmadı.';
+        case 'oturum': return 'Oturum süresi dolmuş — yeniden giriş yapın.';
+        case 'ag': case 'baglanti': return x.kod === 'ERP_ESKI_SURUM' && x.mesaj ? String(x.mesaj) : 'Bağlantı hatası — kayıt yapılmadı, yeniden deneyin.';
+        default: return 'Kayıt yapılamadı' + (x.err ? ` (${x.err}${x.detay ? ': ' + String(x.detay).slice(0, 120) : ''})` : '') + '.';
+    }
+}
+
+/** YENI'de fason yazımı: kapıya GERÇEK istek. olaylar / depo / ek.kesim_onu: yapiFasonDene ile aynı biçim (programın yazacağı satırlar).
+    Döner { ok: true, olayIds, depo: [{tablo, id, olay}], kesimOnu: [{tur, olay, id}], kisi } | { ok: false, kapiYok } (çağıran eski
+    yoldan yazar — hiçbir şey yazılmadı) | { ok: false, hata, cevap }. Hiç fırlatmaz. */
+async function yapiFasonYaz(olaylar, depo, ek) {
+    let g;
+    try {
+        g = { gid: 'fy_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10),
+            program: String((_yapi.ortam && _yapi.ortam.platform) || ''), deneme: false,
+            olaylar: JSON.parse(JSON.stringify((olaylar || []).map((o) => Object.assign({}, o, { notlar: yapiFasonNot(o.notlar) })))),
+            depo: JSON.parse(JSON.stringify(Array.isArray(depo) ? depo : [])) };
+        if (ek && Array.isArray(ek.kesim_onu) && ek.kesim_onu.length) {
+            g.kesim_onu = JSON.parse(JSON.stringify(ek.kesim_onu.map((x) => (x && x.notlar !== undefined ? Object.assign({}, x, { notlar: yapiFasonNot(x.notlar) }) : x))));
+        }
+    } catch (e) {
+        return { ok: false, hata: 'Kayıt hazırlanamadı.' };
+    }
+    if (!g.olaylar.length) return { ok: false, hata: 'Yazılacak olay yok.' };
+    const tablolar = ['siparis_akis'].concat([...new Set(g.depo.map((d) => d && d.tablo).filter(Boolean))]);
+    const istek = () => {
+        /* kapının yazdığı satırların canlı yankısı bu oturumun kendi yazması ("başka oturumdan" bildirimi çıkmasın) */
+        try { if (_yapi.ortam && typeof _yapi.ortam.kendiYazma === 'function') tablolar.forEach((t) => _yapi.ortam.kendiYazma(t)); } catch (e) {}
+        return yapiRpc('erp_fason_yaz', { p_istek: g }, tablolar);
+    };
+    let r = await istek();
+    /* bağlantı koptu: kapı yazmış olabilir — aynı gid ile bir kez daha (ikinci kez yazmaz, ilk yazımın sonucunu döner) */
+    if (r && (r.err === 'ag' || r.err === 'baglanti') && r.kod !== 'ERP_ESKI_SURUM') r = await istek();
+    if (r && r.err === 'kurulu_degil') { _yapiFason.kapiYok = true; return { ok: false, kapiYok: true }; }
+    if (!r || !r.ok) return { ok: false, hata: yapiFasonHataMetni(r), cevap: r };
+    return { ok: true, olayIds: Array.isArray(r.olay_ids) ? r.olay_ids : [], depo: Array.isArray(r.depo) ? r.depo : [],
+        kesimOnu: Array.isArray(r.kesim_onu) ? r.kesim_onu : [], kisi: String(r.kisi || ''), cevap: r };
+}
+
 /* ═══ M7 ÜRÜN AĞACI · OKUMA KIYASI (karşılaştırma aşaması, 22.10.2026 gece) ═══════════════════════════════════════════════
    SQL: supabase/yapi-adim/16-urun-agaci-oku (v_urun_agaci_kap: kap + kalem_siralar + arsiv_siralar). Kararlar docs/M7-URUN-AGACI-TASLAK.md.
    Anahtar 'recete' KARSILASTIR'dayken ürün ağacı kabı (KD_URUN_AGACI) AĞDAN okunduğu anda (ana program + mobil 08 sbKdGet / sbKdGetMany /
@@ -1815,6 +1893,86 @@ function yapiReceteFarkYaz(g, r) {
         ayrinti: { islem: 'yaz', tur: g.tur || 'yaz', neden, ayrinti: r.neden || '', sira: r.sira ?? null, program: g.program, gid: g.gid,
             gordugu: g.gordugu || null, kapi_satiri: r.akis_id ?? null, boyut: g.notlar ? String(g.notlar).length : 0 }
     });
+}
+
+/* ═══ M7c ÜRÜN AĞACI · EKRAN GEÇİŞİ (anahtar 'recete' YENI, 30.10.2026) ════════════════════════════════════════════════════
+   Karşılaştırmada bir hafta fark 0 (23.10 → 30.10; okuma her ağdan okunuşta kıyaslandı — yazma tarafında bu sürede tek kap değişti).
+   OKUMA: ürün ağacı kabı v_urun_agaci_kap'tan (siparis_recete + CANLI kaleme bağlı kalem_recete — kalemi olmayan / arşivdeki eski
+   reçete görünmez, yeni kalem onu devralmaz: K1; ekranın iç sayacı _ua_edit_seq yok). Okuyucular: ana program + mobil 08 sbKdGet /
+   sbKdGetMany / sbKdGetTipler, Konfeksiyon Panel + Dokuma Panel getKd / getKdBatch — yapiReceteYeniKaplar(sids) Map döndürürse onu
+   kullanır (görünümde satırı olmayan sipariş = boş kap; istek sayısı bugünkü kadar), null ise eski okuma (YENI değil / görünüm kurulu
+   değil / okunamadı). YAZMA: 08 sbKdSet / sbKdDel kapıdan GERÇEK (erp_recete_yaz tur 'yaz' | 'sifirla', deneme değil — SQL 17: K3 yetki,
+   gördüğü hâl, K1, K2 sıfırlamada arşiv + iz kapıda); 'cakisma' (arada başka cihaz yazdı) → program taze okuyup yeniden birleştirir
+   (bugünkü döngü, K4 programda); yazımdan sonra kap görünümden yeniden okunur (yetimsiz son hâl). Bağlantı koparsa aynı gid ile bir kez
+   daha; sürüm kapısının reddi tekrarlanmaz; kapı kurulu değilse bu oturumda eski yazım. Mobilde yalnız yönetici, yalnız Ürün Ağacı
+   ekranında, yalnız 'yaz' (mobil kapıları; sıfırlama mobilde yok). Tabletler ürün ağacı yazmaz. */
+function yapiReceteYeniMi() { return yapiYeniMi('recete') && !_yapiRecete.gorunumYok; }
+function yapiReceteYazYeniMi() { return yapiYeniMi('recete') && !_yapiRecete.kapiYok; }
+
+/** YENI'de siparişlerin ürün ağacı kabı görünümden: Map(sid → kap; görünümde yoksa boş nesne) ya da null (YENI değil / görünüm kurulu
+    değil / okunamadı → çağıran eski yoldan okur). Hiç fırlatmaz. */
+async function yapiReceteYeniKaplar(sids) {
+    if (!yapiReceteYeniMi()) return null;
+    const c = yapiSb();
+    if (!c || typeof c.from !== 'function') return null;
+    const liste = [...new Set((sids || []).map((s) => String(s == null ? '' : s).trim()).filter((s) => /^\d+$/.test(s)))];
+    const out = new Map();
+    for (let i = 0; i < liste.length; i += _yapiRecete.parca) {
+        const parca = liste.slice(i, i + _yapiRecete.parca);
+        try {
+            const { data, error } = await c.from('v_urun_agaci_kap').select('siparis_id,kap').in('siparis_id', parca);
+            if (error) { if (yapiRpcYokMu(error)) _yapiRecete.gorunumYok = true; else _yapiRecete.sayac.hata++; return null; }
+            _yapiRecete.sayac.okuma++;
+            parca.forEach((sid) => out.set(sid, {}));
+            (data || []).forEach((r) => {
+                const k = r && r.kap;
+                out.set(String(r.siparis_id), k && typeof k === 'object' && !Array.isArray(k) ? k : {});
+            });
+        } catch (e) {
+            _yapiRecete.sayac.hata++;
+            return null;
+        }
+    }
+    return out;
+}
+
+/** Kapının ret nedeni → kullanıcıya gösterilecek metin. */
+function yapiReceteHataMetni(r) {
+    const x = r || {};
+    switch (x.err) {
+        case 'yetki': return 'Ürün ağacını değiştirme yetkiniz yok (Ürün Ağacı ekranı ya da yönetici; mobilde yalnız yönetici).';
+        case 'kalem': return `Ürün ağacındaki ${x.sira != null ? (Number(x.sira) + 1) + '. kalem' : 'bir kalem'} siparişte yok — sipariş kalemleri değişmiş, ekranı yenileyip tekrar deneyin.`;
+        case 'siparis': return 'Sipariş bulunamadı.';
+        case 'cakisma': return 'Ürün ağacı bu arada başka bir cihazdan değiştirildi — ekranı yenileyip tekrar deneyin.';
+        case 'bicim': return 'Ürün ağacı kaydı kapıda reddedildi' + (x.neden ? ` (${x.neden})` : '') + '.';
+        case 'oturum': return 'Oturum süresi dolmuş — yeniden giriş yapın.';
+        case 'ag': case 'baglanti': return x.kod === 'ERP_ESKI_SURUM' && x.mesaj ? String(x.mesaj) : 'Bağlantı hatası — kayıt yapılmadı, yeniden deneyin.';
+        default: return 'Kayıt yapılamadı' + (x.err ? ` (${x.err}${x.detay ? ': ' + String(x.detay).slice(0, 120) : ''})` : '') + '.';
+    }
+}
+
+/** YENI'de ürün ağacı yazımı: kapıya GERÇEK istek. istek = { siparis_id, tur: 'yaz' | 'sifirla', gordugu: { id, updated_at } | null,
+    notlar: kap metni } (yapiReceteDeneBekle ile aynı biçim). Döner { ok: true, akisId } | { ok: false, kapiYok } (çağıran eski yoldan
+    yazar — hiçbir şey yazılmadı) | { ok: false, cakisma, hata, cevap }. Hiç fırlatmaz. */
+async function yapiReceteYaz(istek) {
+    let g;
+    try {
+        g = Object.assign({ gid: 'ry_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10),
+            program: String((_yapi.ortam && _yapi.ortam.platform) || ''), deneme: false }, JSON.parse(JSON.stringify(istek || {})));
+    } catch (e) {
+        return { ok: false, hata: 'Kayıt hazırlanamadı.' };
+    }
+    const yolla = () => {
+        /* kapının yazdığı satırın canlı yankısı bu oturumun kendi yazması ("başka oturumdan" bildirimi çıkmasın) */
+        try { if (_yapi.ortam && typeof _yapi.ortam.kendiYazma === 'function') _yapi.ortam.kendiYazma('siparis_akis'); } catch (e) {}
+        return yapiRpc('erp_recete_yaz', { p_istek: g }, ['siparis_akis']);
+    };
+    let r = await yolla();
+    /* bağlantı koptu: kapı yazmış olabilir — aynı gid ile bir kez daha (ikinci kez yazmaz, ilk yazımın sonucunu döner) */
+    if (r && (r.err === 'ag' || r.err === 'baglanti') && r.kod !== 'ERP_ESKI_SURUM') r = await yolla();
+    if (r && r.err === 'kurulu_degil') { _yapiRecete.kapiYok = true; return { ok: false, kapiYok: true }; }
+    if (r && r.ok) return { ok: true, akisId: r.akis_id ?? null, cevap: r };
+    return { ok: false, cakisma: !!(r && r.err === 'cakisma' && r.neden !== 'gid'), hata: yapiReceteHataMetni(r), cevap: r };
 }
 
 /* ═══ M8a İPLİK · OKUMA KIYASI (karşılaştırma aşaması, 26.10.2026) ════════════════════════════════════════════════════════
@@ -6414,6 +6572,8 @@ async function getKd(id,tip,forceFresh=false){
   const now=Date.now();
   const ttlMs=15000;
   if(!forceFresh && kdCache[key]!==undefined && (now-(kdCacheTs[key]||0))<ttlMs)return kdCache[key];
+  /* M7c: anahtar 'recete' YENI'de ürün ağacı kabı görünümden (YAPI-OKUMA yapiReceteYeniKaplar; kalemi olmayan eski reçete görünmez); okunamazsa eski okuma */
+  if(tip==='KD_URUN_AGACI'&&typeof yapiReceteYeniKaplar==='function'){const m=await yapiReceteYeniKaplar([id]);if(m){const k=m.get(String(id))||{};const v=kdHamKaydet(k,JSON.stringify(k));kdCache[key]=v;kdCacheTs[key]=Date.now();return v;}}
   try{const{data,error}=await sb.from('siparis_akis').select('id,kalem_ad,notlar,created_at').eq('siparis_id',id).eq('islem',tip).order('created_at',{ascending:false}).limit(20);
   if(error)throw error;
   const c=(data||[]).filter(r=>!r.kalem_ad||String(r.kalem_ad)===String(tip)).map(r=>{try{return kdHamKaydet(JSON.parse(r.notlar||'{}'),String(r.notlar||'{}'));}catch{return null;}}).filter(Boolean);
@@ -6432,6 +6592,8 @@ async function getKdBatch(ids,tip){
     return kdCache[key]===undefined || (now-(kdCacheTs[key]||0))>=ttlMs;
   });
   if(!eksik.length)return;
+  /* M7c: anahtar 'recete' YENI'de ürün ağacı kabı görünümden (YAPI-OKUMA yapiReceteYeniKaplar); okunamazsa eski okuma */
+  if(tip==='KD_URUN_AGACI'&&typeof yapiReceteYeniKaplar==='function'){const m=await yapiReceteYeniKaplar(eksik);if(m){eksik.forEach(id=>{const k=m.get(String(id))||{};kdCache[tip+'_'+id]=kdHamKaydet(k,JSON.stringify(k));kdCacheTs[tip+'_'+id]=now;});return;}}
   try{
     const{data,error}=await sb.from('siparis_akis').select('siparis_id,kalem_ad,notlar,created_at').in('siparis_id',eksik).eq('islem',tip).order('created_at',{ascending:false});
     if(error)throw error;
@@ -6772,8 +6934,8 @@ window.addEventListener('offline',()=>{if(karsilamaAcik())karsilamaCiz();});
    surum.json yalnız bu sayfadan YENİ damgalıysa dinlenir (zaman > PANEL_ZAMAN): html yüklenip surum.json unutulunca
    eski surum.json tableti boştayken 10 dk'da bir boşuna yeniden yüklüyordu. Aynı hedef için denemeler seyrekleşir
    (10 dk, 20, 40 … en çok 6 saat) — yeniden yükleme döngüsü üretimi durdurmasın. */
-const PANEL_SURUM='20261028-2e7ed7f5';
-const PANEL_ZAMAN=1793212250;
+const PANEL_SURUM='20261031-f863c453';
+const PANEL_ZAMAN=1793448142;
 /** Hangi sayfanın açık olduğu tabletten okunabilsin (karşılama sayfasının altında). */
 function panelSurumYazisi(){
   const t=new Date(document.lastModified||'');
