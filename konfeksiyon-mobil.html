@@ -511,6 +511,43 @@ function ortakKalemGirisAlanlari(kalem) {
     return { tip, metre: true, kg: tip === 'KG' || ek.indexOf('KG') >= 0, adet: tip === 'ADET' || ek.indexOf('ADET') >= 0, ek };
 }
 
+/** Kumaş planı topu (adetli siparişte dokunan kumaşın kendisi, metreyle): girişte metre + KG (10.11.2026, kullanıcı: "kumaş
+ *  varsa ve metre giriliyorsa kg da girilecek"; önce yalnız metreydi). Platformlar kumaşın "kalemine" (birim MT) bunu ek birim
+ *  olarak koyar → ortakKalemGirisAlanlari metre + kg ister. Veritabanı kapısı aynı kural (SQL 10-uretim-yazma/3-kumas-kg). */
+function ortakKumasTopuEkBirim() {
+    return ['KG'];
+}
+
+/** Dokuma topunda kg şüpheli mi (11.11.2026, kullanıcı: "1 gibi anlamsız kg girilince uyarı çıksın"). Metre başına gram makul
+ *  aralığın dışındaysa şüpheli — ENGEL DEĞİL, platform sorar ("Doğru, kaydet" / "Düzelt"). Ölçüm 11.11: 1.342 topun gerçek
+ *  kg'leri metre başına 250–980 g; 100 g'ın altındaki 151 topun hepsi 1–6 kg yazılmış yer tutucu (19.10'dan beri), 100–200 arası
+ *  hiç yok. Yalnız metre ve kg ikisi de girilmişse bakılır. Dönüş: null (sorun yok) ya da { gm, alt, ust, yon: 'dusuk' | 'yuksek' }. */
+function ortakDokumaKgAraligi() {
+    return { alt: 100, ust: 2000 };
+}
+function ortakDokumaKgSupheli(metre, kg) {
+    const m = ortakSayi(metre), k = ortakSayi(kg);
+    if (!(m > 0) || !(k > 0)) return null;
+    const gm = k * 1000 / m;
+    const a = ortakDokumaKgAraligi();
+    if (gm >= a.alt && gm <= a.ust) return null;
+    return { gm: Math.round(gm), alt: a.alt, ust: a.ust, yon: gm < a.alt ? 'dusuk' : 'yuksek' };
+}
+/** Uyarının metni (dört program aynı cümle): satır = { etiket, metre, kg } */
+function ortakDokumaKgUyariMetni(satirlar) {
+    const say = (v) => String(Math.round(ortakSayi(v) * 10) / 10).replace('.', ',');
+    const bloklar = (satirlar || []).map(s => {
+        const r = ortakDokumaKgSupheli(s.metre, s.kg);
+        if (!r) return '';
+        return (s.etiket ? s.etiket + '\n' : '') + say(s.metre) + ' m için ' + say(s.kg) + ' kg = metre başına ' + r.gm + ' gram ('
+            + (r.yon === 'dusuk' ? 'çok az' : 'çok fazla') + ')';
+    }).filter(Boolean);
+    if (!bloklar.length) return '';
+    const a = ortakDokumaKgAraligi();
+    return '⚠ KG ŞÜPHELİ\n\n' + bloklar.join('\n\n') + '\n\nDokunan kumaşta metre başına ' + a.alt + '–' + a.ust
+        + ' gram beklenir. Kg\'yi tartıdan okuyup girin.\nKg gerçekten buysa "Doğru, kaydet"e basın.';
+}
+
 /** Girişte istenenlerin kısa yazımı: "m", "m + kg", "m + adet", "m + kg + adet". */
 function ortakKalemGirisEtiket(kalem) {
     const a = ortakKalemGirisAlanlari(kalem);
@@ -771,7 +808,12 @@ function ortakDepoDuzeltHesapla(giris, sevk, baslangicMs, yeni) {
 }
 
 /** Sevk defteri satırlarından (kumas_stok, notlarda [DD_V2]; siparis_id + kalem_idx) kalem başına sevk edilen:
- *  Map("sipariş|kalem" → { mt, kg, ad }). Çıkış satırı eksi yazıldığı için mutlak değer toplanır. */
+ *  Map("sipariş|kalem" → { mt, kg, ad }). Çıkış satırı eksi yazıldığı için mutlak değer toplanır.
+ *  İŞARETLİ DEFTER (Boyahane E2, 18.11.2026 — SQL 30 `v_dokuma_depo_bugun` 2. sürümün `defter` CTE'si ile AYNI kural):
+ *  metre ya da kg ARTI olan satır GİRİŞtir (boyahaneden dönen ham mal — "iade"): katkısı EKSİ → sevk edilen düşer, kalan geri artar
+ *  (ortakDepoKalan `mt − sevk.mt`). Değer yine mutlak; adet (cuval_sayisi) çıkışta da ARTI yazıldığından YÖN metre / kg işaretinden okunur.
+ *  Bugünkü veride artı [DD_V2] satırı yok (18.11 canlı okuma) → eski sayılar değişmez. Net sevk eksiye düşebilir (iade > çıkış); kalan
+ *  hesabı bunu aynen alır (SQL gibi — kırpma yalnız kalanda `greatest(0, …)`). */
 function ortakDepoDefterTopla(rows) {
     const m = new Map();
     (rows || []).forEach((r) => {
@@ -780,12 +822,47 @@ function ortakDepoDefterTopla(rows) {
         if (r.siparis_id == null || !Number.isFinite(ki)) return;
         const k = String(r.siparis_id) + '|' + ki;
         const t = m.get(k) || { mt: 0, kg: 0, ad: 0 };
-        t.mt += Math.abs(parseFloat(r.miktar_mt) || 0);
-        t.kg += Math.abs(parseFloat(r.miktar_kg) || 0);
-        t.ad += Math.abs(parseInt(r.cuval_sayisi, 10) || 0);
+        const mtV = parseFloat(r.miktar_mt) || 0, kgV = parseFloat(r.miktar_kg) || 0;
+        const isaret = (mtV > 0 || kgV > 0) ? -1 : 1;   /* GİRİŞ (iade): EKSİ — sevki geri ekler */
+        t.mt += isaret * Math.abs(mtV);
+        t.kg += isaret * Math.abs(kgV);
+        t.ad += isaret * Math.abs(parseInt(r.cuval_sayisi, 10) || 0);
         m.set(k, t);
     });
     return m;
+}
+
+/* ── Boyahane etiketleri (Boyahane E2, 18.11.2026) ───────────────────── */
+
+/** Boyahane depo satırı etiket adları — SQL 30 `erp_boya_etiket(p_ad)` ile AYNI metin (bekçi karşılaştırır):
+ *  GRUP → 'BOYA_GRUP', HAREKET → 'BOYA_HAREKET', IADE → '[BOYA_IADE]' (köşeli parantezli, değersiz etiket), SEVK_YER → 'BOYAHANE' (hedef adı, [SEVK_YER:…] etiketinin DEĞERİ);
+ *  başka ad → null. Satır notunda: [SEVK_YER:BOYAHANE][BOYA_GRUP:<grup>][BOYA_HAREKET:<ilk hareketin kimliği — soy hattı>]([BOYA_IADE]). */
+function ortakBoyaEtiket(ad) {
+    switch (String(ad == null ? '' : ad).toUpperCase()) {
+        case 'GRUP': return 'BOYA_GRUP';
+        case 'HAREKET': return 'BOYA_HAREKET';
+        case 'IADE': return '[BOYA_IADE]';
+        case 'SEVK_YER': return 'BOYAHANE';
+        default: return null;
+    }
+}
+/** Notlarda boyahane (teslim / iade) etiketi var mı: [BOYA_GRUP:… taşıyan depo satırı boyahane işleminin ürünüdür — yalnız Boyahane ekranından
+ *  düzeltilir / silinir (11 / 07 / 33 / Dokuma Panel kilitleri), fişte iç birim sevki sayılmaz. */
+function ortakBoyaSatiriMi(notlar) {
+    return String(notlar == null ? '' : notlar).indexOf('[' + ortakBoyaEtiket('GRUP') + ':') >= 0;
+}
+/** Boyahane iade (GİRİŞ) satırı mı: notlarda [BOYA_IADE]. */
+function ortakBoyaIadeMi(notlar) {
+    return String(notlar == null ? '' : notlar).indexOf(ortakBoyaEtiket('IADE')) >= 0;
+}
+/** Notlardaki boyahane etiketinin değeri: ortakBoyaEtiketOku(notlar, 'GRUP') → '12' (grup kimliği), 'HAREKET' → hareket kimliği (soy hattı — depo satırı ↔
+ *  hareket bağı için DEĞİL, onun için boya_hareket.depo_ids okunur), 'SEVK_YER' → 'BOYAHANE' ([SEVK_YER:BOYAHANE] varsa). Etiket yoksa ya da değersiz etiket (IADE) için ''. */
+function ortakBoyaEtiketOku(notlar, ad) {
+    const s = String(notlar == null ? '' : notlar), a = String(ad == null ? '' : ad).toUpperCase();
+    if (a === 'SEVK_YER') return s.indexOf('[SEVK_YER:' + ortakBoyaEtiket('SEVK_YER') + ']') >= 0 ? ortakBoyaEtiket('SEVK_YER') : '';
+    if (a !== 'GRUP' && a !== 'HAREKET') return '';
+    const m = new RegExp('\\[' + ortakBoyaEtiket(a) + ':([^\\]]*)\\]').exec(s);
+    return m ? m[1] : '';
 }
 
 /* ── Kesim önünde bekleyen ───────────────────────────────────────────── */
@@ -800,8 +877,9 @@ function ortakDepoDefterTopla(rows) {
  *              için kumaş metresi düşülür; metresi bilinmeyen kalemin kesimi metreden düşülemez (metresizAd).
  *  sevkler  : [{ sid, ki, t, ad, mt, kg, kes, … }] — sid metin, ki sayı, t milisaniye; ek alanlar aynen taşınır
  *  kesimler : [{ sid, ki, t, ad }]
- *  kumasKalemleri(sid, ki) → { km, kalemler: [{ ki, m }] } | null   (m = fire dahil 1 adet için metre;
- *                            platform siparişin planını kurar, ortakKesimOnuKumasKalemleri döndürür)
+ *  kumasKalemleri(sid, ki) → { km, kalemler: [{ ki, m, renk }] } | null   (m = fire dahil 1 adet için metre;
+ *                            platform siparişin planını kurar, ortakKesimOnuKumasKalemleri döndürür). Aynı kumaştan
+ *                            birden çok kaleme metreyle sevk varsa her kumaş kalemi tek gruba düşülür (aşağıda).
  *  Dönen: bekleyen kalemler, en uzun bekleyen üstte:
  *    { sid, ki, sevkler (eskiden yeniye), ilk, gelenAd, gelenMt, gelenKg, satirKes, metreMi,
  *      kesilenAd, kalanAd  |  kumas, kesilenAd, kesilenMt, metresizAd, kalanMt,  bekleyenTs } */
@@ -822,11 +900,44 @@ function ortakKesimOnuHesapla(sevkler, kesimler, kumasKalemleri) {
     grup.forEach((g) => kesimSid.set(g.sid, []));
     (kesimler || []).forEach((k) => { const l = k && kesimSid.get(k.sid); if (l) l.push(k); });
     const sonraKesilen = (g, ki) => kesimSid.get(g.sid).reduce((t, k) => (k.ki === ki && k.t >= g.ilk) ? t + (k.ad || 0) : t, 0);
-    const out = [];
+    /* Metreyle gelen kumaş (kumaş planı): aynı siparişte aynı kumaştan BİRDEN ÇOK kaleme sevk varsa (boyahane dönüşü renk
+       renk kendi kalemine — 10.11.2026) her kumaş kalemi TEK gruba düşülür: kalemin kendi grubu; yoksa aynı renkli kalemin
+       grubu (en eski sevkli); yoksa kumaşın ilk (öncü) kaleminin grubu; o da yoksa en eski grup. Tek grupta bütün kalemler
+       o gruba (eski davranış) — bir kesim iki renk grubundan birden düşülmez. */
+    const renkAnahtar = (s) => String(s || '').trim().toLocaleUpperCase('tr-TR');
+    const kumasGrup = new Map();   /* sipariş|kumaş → metreyle gelen gruplar */
     grup.forEach((g) => {
         g.sevkler.sort((a, b) => a.t - b.t);
         g.ilk = g.sevkler[0].t;
         g.metreMi = !(g.gelenAd > 0);
+        if (!g.metreMi || !(g.gelenMt > 0)) return;
+        g._kk = typeof kumasKalemleri === 'function' ? kumasKalemleri(g.sid, g.ki) : null;
+        if (!g._kk || !g._kk.km) return;
+        const a = g.sid + '|' + g._kk.km.id;
+        if (!kumasGrup.has(a)) kumasGrup.set(a, []);
+        kumasGrup.get(a).push(g);
+    });
+    kumasGrup.forEach((gl) => {
+        if (gl.length < 2) return;
+        gl.sort((a, b) => a.ilk - b.ilk);
+        const tum = gl[0]._kk.kalemler;
+        const renkOf = (ki) => renkAnahtar((tum.find((u) => u.ki === ki) || {}).renk);
+        const oncu = gl[0]._kk.km.oncuKi;
+        gl.forEach((g) => { g._atanan = []; });
+        tum.forEach((u) => {
+            const r = renkAnahtar(u.renk);
+            const hedef = gl.find((g) => g.ki === u.ki)
+                || (r ? gl.find((g) => renkOf(g.ki) === r) : null)
+                || gl.find((g) => g.ki === oncu)
+                || gl[0];
+            hedef._atanan.push(u);
+        });
+    });
+    const out = [];
+    grup.forEach((g) => {
+        const kumas = g._kk, atanan = g._atanan;
+        delete g._kk;
+        delete g._atanan;
         let dusen;   /* sevklerden eskiden yeniye düşülecek miktar (adet ya da metre) — bekleme süresi için */
         if (!g.metreMi) {
             g.kesilenAd = Math.max(g.satirKes, sonraKesilen(g, g.ki));
@@ -835,12 +946,11 @@ function ortakKesimOnuHesapla(sevkler, kesimler, kumasKalemleri) {
             dusen = g.kesilenAd;
         } else {
             if (!(g.gelenMt > 0)) return;
-            const kumas = typeof kumasKalemleri === 'function' ? kumasKalemleri(g.sid, g.ki) : null;
             g.kumas = kumas ? kumas.km : null;
             g.kesilenAd = 0;
             g.kesilenMt = 0;
             g.metresizAd = 0;
-            (kumas ? kumas.kalemler : [{ ki: g.ki, m: 0 }]).forEach((u) => {
+            (atanan || (kumas ? kumas.kalemler : [{ ki: g.ki, m: 0 }])).forEach((u) => {
                 const ad = sonraKesilen(g, u.ki);
                 g.kesilenAd += ad;
                 if (u.m > 0) g.kesilenMt += ad * u.m; else g.metresizAd += ad;
@@ -955,12 +1065,14 @@ function ortakYikamaKalemPaylari(satirlar, kapatmalar) {
 
 /* ── Kumaş planı ─────────────────────────────────────────────────────── */
 
-/** Plandaki kumaşlar (KD_URUN_AGACI siparis.kumas_plani.kumaslar) → [{ id, kod, ad, cekme }] (hepsi metin).
- *  Kimliği (A, B …) boş satır kumaş değildir. */
+/** Plandaki kumaşlar (KD_URUN_AGACI siparis.kumas_plani.kumaslar) → [{ id, kod, ad, cekme, fazla, kesim_fire, boya_fire }]
+ *  (hepsi metin; yüzdeler: cekme = boyahane çekmesi, fazla = sipariş fazlası, kesim_fire = kumaşın kalemlerinin kesim
+ *  firesi, boya_fire = siparişin toplam fire payı — 10.11.2026; adı tarihsel, boyahaneye özel değil — 17.11.2026). Kimliği (A, B …) boş satır kumaş değildir. */
 function ortakKumasPlaniKumaslar(ham) {
+    const yazi = (k, a) => String(k && k[a] != null ? k[a] : '');
     return (Array.isArray(ham) ? ham : []).map((k) => ({
         id: String((k && k.id) || ''), kod: String((k && k.kod) || ''), ad: String((k && k.ad) || ''),
-        cekme: String(k && k.cekme != null ? k.cekme : '')
+        cekme: yazi(k, 'cekme'), fazla: yazi(k, 'fazla'), kesim_fire: yazi(k, 'kesim_fire'), boya_fire: yazi(k, 'boya_fire')
     })).filter((k) => k.id);
 }
 
@@ -977,17 +1089,28 @@ function ortakKumasPlaniVarMi(kumaslarHam) {
  *    kalemAgaci(ki) : kalemin ürün ağacı (KD_URUN_AGACI u_<ki>): kumas_id, kumas_metre, kumas_tolerans, asamalar
  *  Kalemin kumaşı (kumas_id): plandaki bir kimlik → o kumaş;  '' → plandaki TEK kumaş (birden çok kumaş varsa hiçbiri);
  *  '-' → kumaştan değil;  planda olmayan kimlik → hiçbiri.
- *  Kalem satırı: { ki, birim, metreMi, kgMi, adet, m, fire, secim, kumasId, otomatik, boyali, adetMetre, dokunur }
- *    m = 1 adet için boyalı kumaş (m), fire = kesim firesi (%) — virgüllü yazım da okunur ("1,5");
- *    adetMetre = m × (1 + fire): fire DAHİL 1 adet için kumaş. Metre / kg birimli kalemde 0 (adetten metreye çevrilmez);
- *    boyali    = adet × m × (1 + fire). Metre birimli kalem kendi metresiyle girer, kg birimli kalem 0;
+ *  Kalem satırı: { ki, birim, metreMi, kgMi, adet, m, fire, fazla, secim, kumasId, otomatik, boyali, adetMetre, dokunur }
+ *    m = 1 adet için boyalı kumaş (m) — virgüllü yazım da okunur ("1,5"); fire = kesim firesi (%): kumaşa bağlı ADET
+ *    kalemde kumaşın kesim firesi (kalemin kumas_tolerans'ı sayılmaz), metre / kg kalemde 0; fazla = kumaşın sipariş fazlası (%);
+ *    adetMetre = m × (1 + fire): fire DAHİL 1 adet için kumaş (sipariş fazlası girmez). Metre / kg birimli kalemde 0;
+ *    boyali    = adet × m × (1 + fazla) × (1 + fire). Metre birimli kalem kendi metresiyle girer, kg birimli kalem 0;
  *    dokunur   = kalemin aşamalarında "dokuma" var ya da aşaması hiç tanımlı değil.
- *  Kumaş: { id, kod, ad, cekme, cekmePct, kalemler (satırlar, kalem sırasıyla), oncuKi (İLK kalemi — dokuma girişi oraya
- *    yazılır), dokunur (kalemlerinden biri dokunuyorsa), boyali (kalemlerin toplamı), ham = boyali × (1 + çekme) }
+ *  Kumaş: { id, kod, ad, cekme, fazla, kesim_fire, boya_fire, cekmePct, fazlaPct, kesimFirePct, boyaFirePct,
+ *    hamCarpan = 1 ÷ ((1 − çekme) × (1 − toplam fire)) — yüzdeler GİDEN ham kumaşa göre (17.11.2026),
+ *    kalemler (satırlar, kalem sırasıyla), oncuKi (İLK kalemi — dokuma
+ *    girişi oraya yazılır), dokunur (kalemlerinden biri dokunuyorsa), boyali (kalemlerin toplamı), ham = boyali × hamCarpan }
  *  Dönen: { var (planda kumaş var mı), kumaslar, satirlar (her kalem, kumaşı olmayan da) }. */
 function ortakKumasPlani(kumaslarHam, kalemler, kalemAgaci) {
     const kumaslar = ortakKumasPlaniKumaslar(kumaslarHam).map((k) => {
         k.cekmePct = ortakSayi(k.cekme);
+        k.fazlaPct = ortakSayi(k.fazla);
+        k.kesimFirePct = ortakSayi(k.kesim_fire);
+        k.boyaFirePct = ortakSayi(k.boya_fire);
+        /* Çekme ve toplam fire GİDEN ham kumaşa göre (17.11.2026, kullanıcı: "10.000 gitti, 8.000 geldi → %20 çekme"):
+           kalan oran = (1 − çekme) × (1 − fire), ham = boyalı ÷ kalan oran. Eskiden boyalıya göreydi (× (1 + çekme) × (1 + fire)) —
+           ham ihtiyaç az çıkıyordu (SP747: %17 / %7 ile ≈ %3,5). %100 ve üstü yüzde hesaplanamaz → çarpan 0 (ham 0). */
+        const kalanOran = (1 - k.cekmePct / 100) * (1 - k.boyaFirePct / 100);
+        k.hamCarpan = kalanOran > 0 ? 1 / kalanOran : 0;
         k.kalemler = [];
         k.oncuKi = null;
         k.dokunur = false;
@@ -1006,12 +1129,17 @@ function ortakKumasPlani(kumaslarHam, kalemler, kalemAgaci) {
         const kgMi = birim === 'KG';
         const adet = metreMi || kgMi ? 0 : (parseInt(k && k.miktar, 10) || 0);
         const m = ortakSayi(ua.kumas_metre);
-        const fire = ortakSayi(ua.kumas_tolerans);
+        const km = kumasId ? byId.get(kumasId) : null;
+        /* Kesim firesi kumaşa bağlı kalemde YALNIZ kumaşın (kullanıcı 10.11.2026: kalem tablosundaki kesim firesi kalktı —
+           kalemde eskiden yazılı değer artık sayılmaz, kumaşınkini gizlice ezmesin); metre / kg kalemde 0.
+           Kumaşa bağlı olmayan kalemde (planda hesaba girmez) eskisi gibi kalemin değeri. */
+        const fire = km ? (!metreMi && !kgMi ? km.kesimFirePct : 0) : ortakSayi(ua.kumas_tolerans);
+        const fazla = km ? km.fazlaPct : 0;
         const net = metreMi ? ortakSayi(k && k.miktar) : (kgMi ? 0 : adet * m);
         const asama = ua.asamalar;
         return {
-            ki, birim, metreMi, kgMi, adet, m, fire, secim, kumasId, otomatik: !secim && !!kumasId,
-            boyali: net * (1 + fire / 100),
+            ki, birim, metreMi, kgMi, adet, m, fire, fazla, secim, kumasId, otomatik: !secim && !!kumasId, renk: String((k && k.renk) || '').trim(),
+            boyali: net * (1 + fazla / 100) * (1 + fire / 100),
             adetMetre: (metreMi || kgMi) ? 0 : m * (1 + fire / 100),
             dokunur: !Array.isArray(asama) || !asama.length || asama.includes('dokuma')
         };
@@ -1024,8 +1152,19 @@ function ortakKumasPlani(kumaslarHam, kalemler, kalemAgaci) {
         km.boyali += r.boyali;
         if (r.dokunur) km.dokunur = true;
     });
-    kumaslar.forEach((km) => { km.ham = km.boyali * (1 + km.cekmePct / 100); });
+    kumaslar.forEach((km) => { km.ham = km.boyali * km.hamCarpan; });
     return { var: kumaslar.length > 0, kumaslar, satirlar };
+}
+
+/** Kumaşın her ekranda görünen adı (11.11.2026, kullanıcı: "kumaş tarak eni kumaş adının yanında yazsın, karıştırmasın kimse" —
+ *  SP747'de iki kumaşın adı aynıydı, yalnız harfi farklıydı): "<ad> · tarak eni <en> · kumaş <A>". Tarak eni stok kartından
+ *  (kumas_kutuphanesi.tarak_eni); platform okur, burada yalnız metin kurulur. Ad yoksa "Kumaş <A>". Dört program aynı metni basar. */
+function ortakKumasAdiEtiket(km, tarakEni) {
+    const ad = String((km && (km.ad || km.kod)) || '').trim();
+    const t = String(tarakEni == null ? '' : tarakEni).trim();
+    const id = String((km && km.id) || '').trim();
+    const tarak = t ? ' · tarak eni ' + t : '';
+    return ad ? ad + tarak + (id ? ' · kumaş ' + id : '') : ('Kumaş ' + id).trim() + tarak;
 }
 
 /** Kalemin kumaşı (ortakKumasPlani çıktısından): kumaş nesnesi | null (kalem bir kumaşa bağlı değil). */
@@ -1034,11 +1173,12 @@ function ortakKumasPlaniKalemKumasi(plan, ki) {
     return ((plan && plan.kumaslar) || []).find((km) => km.kalemler.some((r) => r.ki === n)) || null;
 }
 
-/** Kesim önü için — metreyle gelen kumaşın kalemleri: { km, kalemler: [{ ki, m }] } | null
- *  (m = fire dahil 1 adet için metre; ortakKesimOnuHesapla'nın kumasKalemleri geri çağrısı bunu döndürür). */
+/** Kesim önü için — metreyle gelen kumaşın kalemleri: { km, kalemler: [{ ki, m, renk }] } | null
+ *  (m = fire dahil 1 adet için metre, renk = kalemin rengi — boyahane dönüşü renk renk ayrı kaleme gelince kesim
+ *  hangi gruptan düşülecek; ortakKesimOnuHesapla'nın kumasKalemleri geri çağrısı bunu döndürür). */
 function ortakKesimOnuKumasKalemleri(plan, ki) {
     const km = ortakKumasPlaniKalemKumasi(plan, ki);
-    return km ? { km, kalemler: km.kalemler.map((r) => ({ ki: r.ki, m: r.adetMetre })) } : null;
+    return km ? { km, kalemler: km.kalemler.map((r) => ({ ki: r.ki, m: r.adetMetre, renk: r.renk || '' })) } : null;
 }
 /* ORTAK-KURALLAR:SON */</script>
 <script>/* YAPI-OKUMA:BAS — src/stok/js/38-yapi-okuma.js dosyasından üretilir (npm run sync:mobil). ELLE DEĞİŞTİRMEYİN. */
@@ -1082,7 +1222,7 @@ function yapiModulleri() {
         { k: 'stok_sayim', m: 'M3', ad: 'Stok sayımı (pilot yazma)', hazir: true, yeni: true },   /* assets/stok-sayim.js */
         { k: 'uretim_yazma', m: 'M4', ad: 'Üretim yazma (dokuma)', hazir: true, yeni: true },   /* yapiUretimDene · ekran geçişi yapiUretimYaz (01.11) */
         { k: 'depo', m: 'M5', ad: 'Depo ve sevk yazma (ekleme)', hazir: true, yeni: false },   /* yapiDepoDene */
-        { k: 'fason', m: 'M6', ad: 'Fason ve terbiye', hazir: true, yeni: true },   /* yapiFasonOkuKiyas + yapiFasonDene (21.10) · ekran geçişi yapiFasonYaz / yapiFasonOkumaKaynagi (30.10) */
+        { k: 'fason', m: 'M6', ad: 'Fason', hazir: true, yeni: true },   /* yapiFasonOkuKiyas + yapiFasonDene (21.10) · ekran geçişi yapiFasonYaz / yapiFasonOkumaKaynagi (30.10) */
         { k: 'recete', m: 'M7', ad: 'Ürün ağacı ve kumaş planı', hazir: true, yeni: true },   /* yapiReceteKiyasEkle (M7a, 22.10 gece) · ekran geçişi yapiReceteYeniKaplar / yapiReceteYaz (M7c, 30.10) */
         { k: 'iplik', m: 'M8', ad: 'İplik', hazir: true, yeni: true },   /* yapiIplikOkuKiyas (M8a, 26.10) · yapiIplikDene (M8b) · ekran geçişi yapiIplikYaz / yapiIplikOkumaKaynagi (M8c, 28.10) */
         { k: 'stok_kart', m: 'M9', ad: 'Stok kartları', hazir: true, yeni: false },   /* yapiKartOkuKiyas (M9a, 31.10) · yapiKartDene (M9b, 31.10) */
@@ -1567,7 +1707,7 @@ function yapiDepoDuzeltDeneSonuc(g, r, durum) {
      60 sn'nin olayları atlanır). Fark: 'oku|eksik|<id>' (yeni yerde yok), 'oku|fazla|<id>' (eski yerde yok), 'oku|icerik|<id>'.
      Görünüm kurulu değilse oturumda bir daha okunmaz.
    - YAZMA: olay yazan yerler yazmadan önce aynı olayları (+ varsa depo ters kayıtlarını) erp_fason_yaz'a DENEME olarak sorar (≤1,5 sn):
-     olay + depo birlikte yazan yollar (12 fasonHareketKaydet / Duzelt / Sil, 20 fasonAgacTopluHareketYaz, 23 terbiyeHareketYaz) TEK
+     olay + depo birlikte yazan yollar (12 fasonHareketKaydet / Duzelt / Sil, 20 fasonAgacTopluHareketYaz) TEK
      denemede; diğerleri (föy, iş, kapama, Dokuma Depo yan etkisi) 12 fasonOlayYaz içinde. Boyalı kumaşın Konfeksiyon'a dönüşü (42) Kesim
      önü satırını da aynı denemede gönderir: ek.kesim_onu = [{ olay, siparis_id, kalem_ad, miktar, notlar }] (yazılacak KUMAS_GELIS) ya da
      silmede [{ olay, tur: 'sil', id, iz }] (22.10.2026). Ret → fark 'yaz|<neden>|<anahtar>|<ayrıntı>'
@@ -1704,14 +1844,14 @@ function yapiFasonDeneSonuc(g, r, durum) {
 /* ═══ M6 FASON / TERBİYE · EKRAN GEÇİŞİ (anahtar 'fason' YENI, 30.10.2026) ═══════════════════════════════════════════════
    Karşılaştırmada bir hafta fark 0 (22.10 → 29.10, 85 olay). OKUMA: 12 fasonAkisYukle olayları v_fason_akis'ten okur (siparis_akis'in
    FASON_* satırıyla aynı biçim: id = akış id'si, created_at, notlar = olayın tam hâli); görünüm okunamazsa oturumda eski tabloya döner.
-   YAZMA: fason motorunun olayları + depo ters kayıtları + Terbiye kumaş dönüşünün Kesim önü satırı TEK kapı isteğinde GERÇEK olarak
+   YAZMA: fason motorunun olayları + depo ters kayıtları TEK kapı isteğinde GERÇEK olarak
    (erp_fason_yaz, deneme değil — SQL 14): biri düşerse hiçbiri yazılmaz (eski "depo / Kesim önü satırını geri sil" adımı yok); depo bağı
    (notlar.depo) ve Kesim önü bağı (notlar.konf_gelis) kapıda kurulur, kişi oturumdan. Bağlantı koparsa aynı gid ile bir kez daha
    sorulur (kapı aynı gid'i ikinci kez yazmaz, ilk yazımın sonucunu döner); sürüm kapısının reddi (ERP_ESKI_SURUM) tekrarlanmaz. Kapı
    kurulu değilse bu oturumda eski yazıma dönülür. Olaylar yine siparis_akis'e yazılır (eşitleme fason_hareket'e taşır — eski sürümdeki
    cihaz görmeye devam eder; M6d'de kapanır). Fiyat / ödeme (M6c) değişmez: 12 fasonOlayYaz önce fasonFiyatYolu'ndan geçer, kapıya
    fiyatsız olay gider. Bağlantı yerleri 12 fasonOlayYaz (tek olay) + fasonKapiYaz (olay + depo + Kesim önü: 12 fasonHareketKaydet /
-   Duzelt / Sil, 20 fasonAgacTopluHareketYaz, 23 terbiyeHareketYaz). Mobil fason yazmaz; tabletlerde fason yok. */
+   Duzelt / Sil, 20 fasonAgacTopluHareketYaz). Mobil fason yazmaz; tabletlerde fason yok. */
 function yapiFasonYeniMi() { return yapiYeniMi('fason') && !_yapiFason.kapiYok; }
 
 /** 12 fasonAkisYukle: fason olayları hangi tablodan / görünümden okunsun. */
@@ -2203,7 +2343,7 @@ async function yapiIplikOkuKiyas(eskiSatirlar) {
    ['eksi'] (program eksiye düşeceğini sordu, kullanıcı devam dedi) · ['kart_hareketli'] (hareketi olan kart silinirken uyardı).
    Bağlantı yerleri (ekran): 07 handleSave iplik kartı / depo formu ekle + düzelt (IPLIK_KART · DEPO_HAREKET · SEVKIYAT, yapiIplikEkran)
    · 07 deleteRecord iplik kartı (KART_SIL) · 11 depoHareketDuzeltKaydet / depoHareketSil (DEPO_DUZELT) · 33 fisDuzeltUygula (SEVKIYAT_FISI)
-   · 42 terbiyeRenkKartiHazirla (RENK_KARTI) · stok-sayim.js sayimHareketleriYaz (STOK_SAYIM). Fason ters kaydı M6 kapısında (12).
+   · stok-sayim.js sayimHareketleriYaz (STOK_SAYIM). Fason ters kaydı M6 kapısında (12).
    Tabletler ve yeni mobil iplik yazmaz. Ölçüm _yapiIplikYaz.sayac (istek / fark / hata / gec). */
 var _yapiIplikYaz = { kapiYok: false, sayac: { istek: 0, fark: 0, hata: 0, gec: 0 } };
 
@@ -3075,16 +3215,6 @@ async function restoreUiState(){
 
   switchTab(tab,tabToIdx(tab));
 }
-/* Arka plan prefetch — sipariş seçilince anında gelsin */
-async function prefetchKdData(){
-  const liste=(window._girisListesi||[]).slice(0,10);
-  for(const s of liste){
-    if(kdCache['KD_KONFEKSIYON_'+s.id]===undefined||kdCache['KD_URUN_AGACI_'+s.id]===undefined){
-      await Promise.all([getKd(s.id,'KD_KONFEKSIYON'),getKd(s.id,'KD_URUN_AGACI')]);
-      await new Promise(r=>setTimeout(r,100));
-    }
-  }
-}
 
 function initSB(){const c=window.__ERP_SUPABASE;if(!c||!c.url||!c.anonKey){showErr('erp-config.js yapılandırılmamış.');return false;}sb=supabase.createClient(c.url.trim(),c.anonKey.trim());anlikYazmaIzle(sb);/* bu tabletin yazmaları öbür programlara haber verir (anlık haber) */return true;}
 
@@ -3328,10 +3458,11 @@ async function startApp(){
   document.getElementById('user-info').textContent=currentUser.display_name||currentUser.username;
   const yenileBtn=document.getElementById('yenile-btn');
   if(yenileBtn)yenileBtn.style.display='flex';
-  await loadSiparisler();
+  /* Damga tabanı veri okunmadan ÖNCE (05.11.2026, tazeDamgaTabani). Eski "prefetchKdData" (ilk 10 siparişin kabı sırayla,
+     20 istek / ~5 sn) kaldırıldı: sayfada artık olmayan Veri Girişi seçicisi içindi ve kaplar 15 sn'de bayatlıyordu. */
+  await Promise.all([loadSiparisler(),tazeDamgaTabani()]);
   await restoreUiState();
   startLiveSync();
-  setTimeout(()=>prefetchKdData(),600);
   bekleyenAkisSeritCiz();
   bekleyenAkisGonder();
   /* Yapı geçişi ortak okuyucusu (YAPI-OKUMA bloğu): modül anahtarları + cihaz sürümü */
@@ -3342,6 +3473,7 @@ async function startApp(){
 const SIP_KOLON='id,created_at,sno,firma,starih,ttarih,notlar,durum,cins,miktar,updated_by,islem_gecmisi,kaynak_birim,atki_renkleri,musteri,uretim_yeri,siparis_grubu,updated_at';
 const SIP_GIZLI=['TAMAMLANDI','İPTAL'];
 let _sipSon='';   /* okunan siparişlerin en yeni updated_at'i — anlık haberde "bundan sonra değişenler" */
+let _sipDurumMesgul=false,_sipDurumSon=0,_sipDurumZorla=false,_sipEkranBekliyor=false;   /* kapalı sipariş kapısı / durum yoklaması (aşağıda, anlikSiparisYenile'nin altında) */
 async function loadSiparisler(sessiz){
   try{
     const gizli=SIP_GIZLI;
@@ -3358,6 +3490,7 @@ async function loadSiparisler(sessiz){
     const tumSiparisler=(sipRes.data||[]);
     _sipSon=tumSiparisler.reduce((m,x)=>String(x.updated_at||'')>m?String(x.updated_at||''):m,'');
     panelSiparisTum=tumSiparisler.filter(isKonfeksiyonPanelSiparisi);
+    _sipDurumSon=Date.now();   /* tam okuma durumları da yeniledi — durum yoklaması 3 dk sonra */
     siparisler=panelSiparisTum.filter(s=>!gizli.includes(String(s.durum||'').toUpperCase().trim()));
     simteksIds=new Set(siparisler.map(s=>String(s.id)));
     window._girisListesi=[...siparisler];
@@ -4890,6 +5023,10 @@ async function urunAraSatirKaydet(btn,siparisId,kalemIdx){
   const origTxt=btn?btn.textContent:'';
   if(btn){btn.disabled=true;btn.textContent='…';}
   try{
+    if(!(await sipKapaliKapisi([siparisId]))){   /* kapalı sipariş: hiçbir şey yazılmaz (05.11.2026, SP628) */
+      if(btn){btn.disabled=false;btn.textContent=origTxt;}
+      return;
+    }
     const sip=siparisler.find(s=>String(s.id)===String(siparisId));
     const kalemler=parseKalemler(sip||{});
     const kalem=kalemler[kalemIdx]||{};
@@ -5066,9 +5203,31 @@ function kesimOnuAd(sid,ki,j,kumas){
   const k=parseKalemler(sip||{})[ki]||{};
   j=j||{};
   return{sno:sip?.sno||j.lot_no||('#'+sid),firma:sip?.firma||j.firma||'',
-    etiket:kumas?((kumas.ad||kumas.kod||'Kumaş')+' · kumaş '+(kumas.id||'')+' · HAM')
+    etiket:kumas?(ortakKumasAdiEtiket(kumas,kumasTarakEni(kumas.kod))+' · '+((j.kaynak==='BOYAHANE'&&(j.renk||k.renk||j.kalem_renk))||'HAM'))
       :[k.ad||k.kod||j.kumas_cinsi||'Kalem '+(ki+1),k.renk||j.kalem_renk,k.ebat||k.olcu||j.kalem_ebat].filter(Boolean).join(' · ')};
 }
+/* Kumaş planı kumaşlarının tarak eni (11.11.2026, kullanıcı: "kumaş tarak eni kumaş adının yanında yazsın, karıştırmasın kimse";
+   ad metni ORTAK ortakKumasAdiEtiket — ana program + Dokuma Panel aynı). Stok kartından (kumas_kutuphanesi.tarak_eni): yalnız yüklü
+   planlardaki kodlar, bilinmeyen kod varsa TEK küçük istek, 30 dk önbellek; okunamazsa ad tarak enisiz. Yalnız okur. */
+const _kartTarak=new Map();let _kartTarakAt=0;
+async function kumasTarakHazirla(){
+  try{
+    if(Date.now()-_kartTarakAt>30*60000){_kartTarak.clear();_kartTarakAt=Date.now();}
+    const kodlar=new Set();
+    Object.keys(kdCache).forEach(k=>{
+      if(!k.startsWith('KD_URUN_AGACI_'))return;
+      (kdCache[k]?.siparis?.kumas_plani?.kumaslar||[]).forEach(km=>{const c=String(km?.kod||'').trim().toUpperCase();if(c&&!_kartTarak.has(c))kodlar.add(c);});
+    });
+    if(!kodlar.size)return;
+    const eksik=[...kodlar],liste=eksik.map(c=>'"'+c.replace(/["\\]/g,'')+'"').join(',');
+    const{data,error}=await sb.from('kumas_kutuphanesi').select('desen_kodu,stok_kodu,tarak_eni').or(`desen_kodu.in.(${liste}),stok_kodu.in.(${liste})`);
+    if(error)return;
+    eksik.forEach(c=>_kartTarak.set(c,''));
+    (data||[]).forEach(r=>{const t=String(r.tarak_eni||'').trim();if(!t)return;
+      [r.desen_kodu,r.stok_kodu].forEach(c=>{c=String(c||'').trim().toUpperCase();if(c&&kodlar.has(c))_kartTarak.set(c,t);});});
+  }catch(e){console.warn('kumasTarakHazirla',e?.message||e);}
+}
+function kumasTarakEni(kod){return _kartTarak.get(String(kod||'').trim().toUpperCase())||'';}
 /** Kapatılanlar (son 30 gün): aynı kapatmanın satırları tek satır; "Geri aç". */
 let _kesimOnuKapaliAcik=false;
 function kesimOnuKapaliHtml(){
@@ -5135,7 +5294,7 @@ async function kesimOnuListeOku(force){
   const[sevkler,ky]=await Promise.all([kesimOnuSevkleriOku(force),konfKyYukle(force===true)]);
   /* kumaş planı yalnız adetsiz (metreyle) gelen sevki olan siparişler için okunur */
   const metreli=[...new Set(sevkler.filter(s=>!(s.ad>0)&&s.mt>0).map(s=>s.sid))];
-  if(metreli.length)await getKdBatch(metreli,'KD_URUN_AGACI');
+  if(metreli.length){await getKdBatch(metreli,'KD_URUN_AGACI');await kumasTarakHazirla();}
   return kesimOnuHesapla(sevkler,ky);
 }
 async function kesimOnuRender(force){
@@ -5215,6 +5374,13 @@ async function tazeDamga(tablo,suz){
   return{say:count,upd:String(data?.[0]?.updated_at||'')};
 }
 function tazeDamgaAyni(a,b){return!!a&&!!b&&a.say===b.say&&a.upd===b.upd;}
+/** Açılış (05.11.2026): işlem kayıtlarının damgası VERİ OKUNMADAN ÖNCE alınır (ana programdaki erpLiveDamgaTabani gibi).
+    Eskiden ilk tazeleme turu damgayı "ilk bakış" sayıp sayaç + kaliteyi (≈437 KB) açılıştan 10 sn sonra ikinci kez indiriyordu;
+    şimdi arada değişen satır olağan yoldan (yalnız değişenler) okunur. Okunamazsa eski davranış (ilk turda tamamı). */
+async function tazeDamgaTabani(){
+  if(_tazeIz||!sb)return;
+  try{const d=await tazeDamga('siparis_akis',q=>q.in('islem',tazeIslemler()));if(d&&!_tazeIz)_tazeIz=d;}catch(e){}
+}
 /** Liste yeniden çizilmesin: yazılıyor, düzenleme / pencere açık ya da az önce dokunuldu. Rakamlar bunu beklemez. */
 function tazeListeMesgul(){
   if(typeof hmAcik==='function'&&hmAcik())return true;
@@ -5503,7 +5669,7 @@ async function anlikIsle(deneme){
   const t=new Set(_anlikGelen);
   _anlikGelen.clear();
   if(t.has('yapi_gecis_ayar')&&typeof yapiAnlikGeldi==='function')yapiAnlikGeldi(['yapi_gecis_ayar']);   /* yapı geçişi anahtarı (ortak okuyucu) */
-  if(t.has('siparisler'))_anlikSipBekliyor=true;
+  if(t.has('siparisler')){_anlikSipBekliyor=true;_sipDurumZorla=true;}   /* sipariş kapatma updated_at'i değiştirmez — durum ayrıca yoklanır */
   if(t.has('kumas_stok')&&typeof yapiYeniTazele==='function')yapiYeniTazele('sevk',null);   /* M1 YENI: depo değişti → gösterilen sevk tazelenir */
   if(t.has('siparis_akis')||t.has(KONF_KY_TABLO))await tazeIzleTick();
   if(t.has('siparis_akis'))kesimOnuIzleTick();   /* dokumadan yeni sevk: Kesim önü kutusu 8 sn beklemez */
@@ -5543,8 +5709,95 @@ async function anlikSiparisYenile(){
   }catch(e){}
   finally{_anlikSipMesgul=false;}
 }
+/* ── KAPALI SİPARİŞ KAPISI (05.11.2026) ────────────────────────────────────────────────────────────────────────────
+   SP628 04.11'de kapatıldı, 05.11'de bu panelin Ürün Ara ekranından kalite kaydı girilebildi (aynı kalıpta 5 sipariş,
+   16 kayıt). Neden: ana programdaki kapatma yalnız durum + işlem geçmişini yazar, `siparisler.updated_at`a DOKUNMAZ;
+   anlikSiparisYenile "updated_at'i değişeni" okuduğu için kapanışı hiç görmüyordu — tablet açık kaldıkça kapanan sipariş
+   "açık" listede durdu ve yazma yollarında durum denetimi yoktu. İki önlem (yeni tablo / kolon / yazma yolu YOK):
+   1) sipKapaliKapisi: yazmadan hemen ÖNCE siparişin durumu veritabanından TAZE okunur; kapalıysa kayıt yapılmaz, sipariş
+      listelerden düşer. Okunamazsa giriş durmaz (kaliteIkizOnay'daki kural; yazma da ağsız çalışmaz).
+   2) sipDurumYokla: açık siparişlerin yalnız id + durum bilgisi 3 dakikada bir (ve sipariş haberi gelince) okunur
+      (~80 sipariş, birkaç KB) — kapananlar listeden düşer. Kuralın kendisi ortakSiparisKapaliMi (ana programla aynı). */
+async function sipDurumOku(ids){
+  const liste=[...new Set((ids||[]).map(String))].filter(Boolean);
+  const m=new Map();
+  for(let i=0;i<liste.length;i+=150){
+    const{data,error}=await sb.from('siparisler').select('id,durum').in('id',liste.slice(i,i+150).map(coerceSiparisIdForDb));
+    if(error)throw error;
+    (data||[]).forEach(r=>m.set(String(r.id),String(r.durum||'')));
+  }
+  return m;
+}
+/** Taze durumları yerel listeye işler (açık / kapalı değişirse açık listeler yeniden kurulur). Değişen sipariş sayısını döner. */
+function sipDurumUygula(taze){
+  let degisen=0;
+  panelSiparisTum.forEach(s=>{
+    const d=taze.get(String(s.id));
+    if(d===undefined||d===String(s.durum||''))return;
+    const once=ortakSiparisKapaliMi(s.durum);
+    s.durum=d;
+    if(once!==ortakSiparisKapaliMi(d))degisen++;
+  });
+  if(degisen){
+    siparisler=panelSiparisTum.filter(s=>!ortakSiparisKapaliMi(s.durum));
+    simteksIds=new Set(siparisler.map(s=>String(s.id)));
+    window._girisListesi=[...siparisler];
+    _uaHaystackCache.clear();_sipHaystackCache.clear();
+  }
+  return degisen;
+}
+/** Açık listelerin ekrandaki hâlini yeniler: sipariş listesi, Veri Girişi seçicisi (seçili sipariş kapandıysa form sıfırlanır),
+    Ürün Ara sonuçları (kapanan siparişin satırı varsa). */
+function sipKapaliEkranlariYenile(){
+  renderSiparisler();
+  populateSelects();
+  if(girisSeciliId&&!siparisler.some(s=>String(s.id)===String(girisSeciliId))){
+    if(document.getElementById('giris-siparis-sel'))girisLoadSiparis();
+    else{girisSeciliId=null;girisAktifAsama=null;const a=document.getElementById('giris-form-area');if(a)a.innerHTML='';}
+  }
+  if(_uaSonSatirlar.some(r=>!siparisler.some(s=>String(s.id)===String(r.siparisId))))urunAraRender();
+}
+/** Yazmadan hemen önce çağrılır: true = devam, false = kapalı sipariş bulundu (kayıt YAPILMAMALI; ekran ve toast burada). */
+async function sipKapaliKapisi(ids){
+  const liste=[...new Set((ids||[]).map(String))].filter(Boolean);
+  if(!liste.length)return true;
+  const sno=id=>(panelSiparisTum.find(s=>String(s.id)===String(id))||{}).sno||id;
+  let kapali=liste.filter(id=>{const s=panelSiparisTum.find(x=>String(x.id)===id);return s&&ortakSiparisKapaliMi(s.durum);});   /* yoklama / başka giriş zaten kapalı görmüş */
+  if(!kapali.length){
+    try{
+      const taze=await sipDurumOku(liste);
+      sipDurumUygula(taze);
+      kapali=liste.filter(id=>taze.has(id)&&ortakSiparisKapaliMi(taze.get(id)));
+    }catch(e){return true;}   /* okunamadı: giriş durmaz */
+  }
+  if(!kapali.length)return true;
+  sipKapaliEkranlariYenile();
+  showToast('❌ '+kapali.map(sno).join(', ')+' kapatılmış sipariş — kayıt yapılmadı. Sipariş listeden kaldırıldı.',6500);
+  return false;
+}
+/** Açık siparişlerin durumu: 3 dk'da bir, sipariş haberi gelince hemen (en çok 15 sn'de bir). Kimse yazarken ekran çizilmez (kapı korur). */
+async function sipDurumYokla(){
+  if(_sipDurumMesgul||!sb||!currentUser||!siparisler.length)return;
+  _sipDurumMesgul=true;_sipDurumZorla=false;
+  try{
+    const taze=await sipDurumOku(siparisler.map(s=>s.id));
+    if(sipDurumUygula(taze)){
+      if(tazeListeMesgul())_sipEkranBekliyor=true;
+      else sipKapaliEkranlariYenile();
+    }
+  }catch(e){}
+  finally{_sipDurumMesgul=false;_sipDurumSon=Date.now();}
+}
+function sipDurumTur(){
+  if(!sb||!currentUser||document.hidden||karsilamaAcik())return;
+  if(_sipEkranBekliyor&&!tazeListeMesgul()){_sipEkranBekliyor=false;sipKapaliEkranlariYenile();}
+  const gecen=Date.now()-_sipDurumSon;
+  if(gecen>=180000||(_sipDurumZorla&&gecen>=15000))sipDurumYokla().catch(()=>{});
+}
 /* kanal girişten sonra açılır; meşgulken bekleyen sipariş listesi boşalınca alınır */
 setInterval(()=>{if(sb&&currentUser){anlikKanalAl();anlikSiparisDene();}},5000);
+/* kapalı sipariş kapısı: durum yoklaması (yukarıdaki sipDurumTur — yalnız okur) */
+setInterval(sipDurumTur,5000);
 /** Bekleyen satıra dokununca sipariş aranır — kesim adedi o ürünün satırına girilir. */
 function kesimOnuAra(sno){
   const el=document.getElementById('ua-arama');
@@ -5713,6 +5966,7 @@ async function yikamaOnuKapat(kyId){
     if(ky)await konfKaliteSiparisTazele([ky.siparis_id]);
     const x=yikamaHazirListe().find(h=>String(h.kesim_id)===String(kyId));
     if(!x){showToast('Bu satırda yıkamaya hazır mal kalmamış',2800);yikamaHazirRender(true);return;}
+    if(!(await sipKapaliKapisi([x.siparis_id]))){yikamaHazirRender(true);return;}   /* kapalı sipariş (05.11.2026, SP628) */
     const baslik=[x.siparis_sno,x.desen,x.renk,x.ebat].filter(Boolean).join(' · ');
     if(!confirm(`${baslik}\n\nYıkamaya hazır ${x.gidecek} ad (bu kesimde kesilen ${x.kesilen})\n\nBu mal yıkamaya gitmeyecek mi (bitti)?\nSatır "Yıkamaya hazır" listesinden düşer; kesim, yıkama ve kalite sayıları değişmez. Adınızla kaydedilir, "Kapatılanlar"dan geri açılır.`))return;
     const user=String(currentUser?.display_name||currentUser?.username||'').trim()||'—';
@@ -5877,6 +6131,12 @@ async function yikamaFisOlustur(){
   if(!meta.firma){showToast('Yıkama firması girin');document.getElementById('yf-firma')?.focus();return;}
   if(!_yfFisSatirlari.length){showToast('Fişe önce ürün ekleyin — yukarıdan arayıp "Fişe ekle" deyin');return;}
   const toplamAd=_yfFisSatirlari.reduce((s,x)=>s+x.adetTop,0);
+  if(!(await sipKapaliKapisi(_yfFisSatirlari.map(x=>x.siparis_id)))){
+    /* kapalı sipariş bulundu (05.11.2026, SP628): fiş oluşmaz; kapalı siparişin satırları fişten çıkar, kalanlar için yeniden denenebilir */
+    _yfFisSatirlari=_yfFisSatirlari.filter(x=>siparisler.some(s=>String(s.id)===String(x.siparis_id)));
+    yikamaFisSatirlariRender();yikamaHazirRender(true);
+    return;
+  }
   {
     /* Sipariş aşımı uyarısı — onaylanmazsa fiş oluşmaz. */
     const asimSatir=_yfFisSatirlari.map(x=>{
@@ -6735,6 +6995,10 @@ async function girisKaydet(tip){
   const origBtnText=btn?btn.textContent:'💾 KAYDET';
   if(btn){btn.disabled=true;btn.textContent='Kaydediliyor…';}
   try{
+    if(!(await sipKapaliKapisi([girisSeciliId]))){   /* kapalı sipariş: hiçbir şey yazılmaz (05.11.2026, SP628) */
+      if(btn){btn.disabled=false;btn.textContent=origBtnText||'💾 KAYDET';}
+      return;
+    }
     // Çakışmayı azaltmak için kaydetmeden hemen önce en güncel KD'yi al.
     const kd=await getKd(girisSeciliId,'KD_KONFEKSIYON',true);
     const k=girisKalemler;
@@ -6924,6 +7188,7 @@ async function ikiKaliteEkle(i){
   if(!girisSeciliId)return;
   const n=v=>parseInt(v||0,10)||0;
   try{
+    if(!(await sipKapaliKapisi([girisSeciliId])))return;   /* kapalı sipariş: hiçbir şey yazılmaz (05.11.2026, SP628) */
     const kd=await getKd(girisSeciliId,'KD_KONFEKSIYON',true);
     const kalem=(girisKalemler||[])[i]||{};
     const sip=siparisler.find(s=>String(s.id)===String(girisSeciliId))||{};
@@ -7324,8 +7589,8 @@ window.addEventListener('offline',()=>{if(karsilamaAcik())karsilamaCiz();});
    surum.json yalnız bu sayfadan YENİ damgalıysa dinlenir (zaman > PANEL_ZAMAN): html yüklenip surum.json unutulunca
    eski surum.json tableti boştayken 10 dk'da bir boşuna yeniden yüklüyordu. Aynı hedef için denemeler seyrekleşir
    (10 dk, 20, 40 … en çok 6 saat) — yeniden yükleme döngüsü üretimi durdurmasın. */
-const PANEL_SURUM='20261101-0346fb6e';
-const PANEL_ZAMAN=1793546989;
+const PANEL_SURUM='20261118-d8d3a8a6';
+const PANEL_ZAMAN=1795003385;
 /** Hangi sayfanın açık olduğu tabletten okunabilsin (karşılama sayfasının altında). */
 function panelSurumYazisi(){
   const t=new Date(document.lastModified||'');
