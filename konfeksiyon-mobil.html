@@ -1063,6 +1063,150 @@ function ortakYikamaKalemPaylari(satirlar, kapatmalar) {
     return p;
 }
 
+/* ── Yıkama fişi düzeltme (27.11.2026) ──────────────────────────────────
+   Kullanıcı 27.11: "fişi düzenlediğimizde düzenlenen sayı doğru yazılıyor ama fişteki her şey yeniden kayıt yapılıyor,
+   her şey x2". Konfeksiyon Panel düzeltmesi fişin BÜTÜN satırlarını geri alıp yeniden dağıtıyordu; bayat fişle (kayıt
+   sürerken ikinci dokunuş, eski liste) çalışınca geri alma 0'da kesiliyor, dağıtım yeniden ekliyordu (YF-20261126-11:
+   5 kalemde +44 ad). Ana program (04 konfYikamaFisDuzeltUygula) ve Konfeksiyon Panel (veriGirisiFisKaydet) AYNI planı
+   kullanır: yalnız adedi DEĞİŞEN satır işlenir, fark kadar; sınırlar ortakYikamaKalemPaylari'ndan. Yazma platformda. */
+
+/** Fiş satırının kesim / yıkama payları [{ id (metin), pay, kesimsiz? }] (pay > 0). Eski tek satırlı fişte (satırda `ky`
+ *  yok) fişin ky_deltalar'ı o satırındır; çok satırlı eski fişte hangi pay hangi satırın bilinmez → null (adet değişmez). */
+function ortakYikamaFisSatirKy(fis, si) {
+    const n = (v) => parseInt(v, 10) || 0;
+    const satirlar = Array.isArray(fis && fis.satirlar) ? fis.satirlar : [];
+    const s = satirlar[si];
+    const cevir = (liste) => liste.map((d) => Object.assign({}, d, { id: String(d.id), pay: n(d.pay) })).filter((d) => d.pay > 0);
+    if (s && Array.isArray(s.ky)) return cevir(s.ky);
+    if (satirlar.length === 1 && Array.isArray(fis && fis.ky_deltalar) && fis.ky_deltalar.length) return cevir(fis.ky_deltalar);
+    return null;
+}
+
+/** Artışın alınabileceği kesim satırları (id, sırayla): önce satırın kendi payları, sonra kalemin yıkama satırları eskiden
+ *  yeniye. paylar: Map(id → ortakYikamaKalemPaylari satırı); kySatirlari: platformun kesim / yıkama satırları
+ *  ({ id, siparis_id, kalem_idx, kaynak }). */
+function ortakYikamaFisAdaylari(satir, ky, paylar, kySatirlari) {
+    const liste = kySatirlari || [];
+    const ilk = ky && ky.length ? (liste.find((r) => String(r.id) === String(ky[0].id)) || null) : null;
+    const sid = String((satir && satir.siparis_id) || (ilk && ilk.siparis_id) || '');
+    const kiS = parseInt(satir && satir.kalem_idx, 10);
+    const ki = Number.isFinite(kiS) ? kiS : parseInt(ilk && ilk.kalem_idx, 10);
+    const kalem = (sid && Number.isFinite(ki))
+        ? liste.filter((r) => String(r.siparis_id) === sid && Number(r.kalem_idx) === ki && paylar.has(String(r.id)))
+            .map((r) => String(r.id))
+            .sort((a, b) => (paylar.get(a).ts - paylar.get(b).ts))
+        : [];
+    return [...new Set([...(ky || []).map((d) => String(d.id)), ...kalem])];
+}
+
+/** YAZMAZ. fis: fişin notu (satirlar, ky_deltalar); istenenler: satır sırasıyla yeni adet (null / undefined = değişmez).
+ *  Azaltma yalnız hâlâ YIKAMADA olan maldan (en son paydan); artış yalnız aynı kalemin YIKAMAYA HAZIR malından, yetmezse
+ *  satırın kesimsiz payına (sınırsız). → { islemler: [{ si, id, delta }], hatalar: [metin] } — değişmeyen satır HİÇ işlenmez. */
+function ortakYikamaFisDuzeltPlan(fis, istenenler, paylar, kySatirlari) {
+    const n = (v) => parseInt(v, 10) || 0;
+    const satirlar = Array.isArray(fis && fis.satirlar) ? fis.satirlar : [];
+    const bul = (id) => (kySatirlari || []).find((r) => String(r.id) === String(id)) || null;
+    const yikamada = new Map(), hazir = new Map();
+    paylar.forEach((p, id) => { yikamada.set(id, n(p.yikamada)); hazir.set(id, n(p.gidecek)); });
+    const islemler = [], hatalar = [];
+    satirlar.forEach((s, si) => {
+        const eski = n(s.adet);
+        const ham = istenenler ? istenenler[si] : null;
+        const istenen = ham == null ? eski : Math.max(0, n(ham));
+        if (istenen === eski) return;
+        const etiket = [s.siparis_sno, s.desen, s.renk, s.ebat].filter(Boolean).join(' · ') || `${si + 1}. satır`;
+        const ky = ortakYikamaFisSatirKy(fis, si);
+        if (!ky) { hatalar.push(`${etiket}: eski biçimde kaydedilmiş fiş satırı — adedi değiştirilemez (yalnız firma / irsaliye).`); return; }
+        if (!ky.some((d) => paylar.has(d.id))) { hatalar.push(`${etiket}: kesim kaydı bulunamadı ya da sipariş kapanmış — adedi değiştirilemez.`); return; }
+        if (istenen < eski) {
+            let dus = eski - istenen;
+            for (let i = ky.length - 1; i >= 0 && dus > 0; i--) {   /* en son eklenen paydan başla */
+                const d = ky[i];
+                const al = Math.min(d.pay, yikamada.get(d.id) || 0, dus);
+                if (al <= 0) continue;
+                dus -= al;
+                yikamada.set(d.id, (yikamada.get(d.id) || 0) - al);
+                hazir.set(d.id, (hazir.get(d.id) || 0) + al);
+                islemler.push({ si, id: d.id, delta: -al });
+            }
+            if (dus > 0) hatalar.push(`${etiket}: en az ${istenen + dus} ad olabilir — bu kadarı yıkamadan gelmiş (kaliteye geçmiş), geri alınamaz.`);
+        } else {
+            let ekle = istenen - eski;
+            for (const id of ortakYikamaFisAdaylari(s, ky, paylar, kySatirlari)) {
+                if (ekle <= 0) break;
+                const al = Math.min(hazir.get(id) || 0, ekle);
+                if (al <= 0) continue;
+                ekle -= al;
+                hazir.set(id, (hazir.get(id) || 0) - al);
+                yikamada.set(id, (yikamada.get(id) || 0) + al);
+                islemler.push({ si, id, delta: al });
+            }
+            /* Kesimsiz gönderilmiş satır (kesim kaydı yokken yıkamaya gönderim): hazır mal yetmezse artış satırın
+               kesimsiz payına yazılır (sınırı yok, kesim kaydı yok). Kesimsiz payı olmayan satırda artış hazırla sınırlı. */
+            const kesimsiz = ekle > 0 ? ky.find((d) => d.kesimsiz || ortakKesimKesimsizMi((bul(d.id) || {}).kaynak)) : null;
+            if (kesimsiz) {
+                yikamada.set(kesimsiz.id, (yikamada.get(kesimsiz.id) || 0) + ekle);
+                islemler.push({ si, id: kesimsiz.id, delta: ekle });
+                ekle = 0;
+            }
+            if (ekle > 0) hatalar.push(`${etiket}: en çok ${istenen - ekle} ad olabilir — bu üründen yıkamaya hazır mal bu kadar.`);
+        }
+    });
+    return { islemler, hatalar };
+}
+
+/** Kesim / yıkama satırının durumu (sayaçlardan). */
+function ortakYikamaSatirDurum(kes, sevk, gel) {
+    const k = parseInt(kes, 10) || 0, s = parseInt(sevk, 10) || 0, g = parseInt(gel, 10) || 0;
+    return s <= 0 ? 'YIKAMA_BEKLIYOR' : (g >= s ? 'KALITE_BEKLIYOR' : (k > 0 && s < k ? 'YIKAMA_KISMEN' : 'YIKAMADA'));
+}
+
+/** Fiş düzeltmesinin bir kesim / yıkama satırına yazacağı yama — sayaçlar TAZE satırdan (yazmadan hemen önce yeniden
+ *  denetlenir). → { yama: { yikama_sevk_adet, durum } } ya da { hata: metin }. */
+function ortakYikamaFisSayacYama(satir, delta) {
+    const n = (v) => parseInt(v, 10) || 0;
+    const kes = n(satir && satir.kesilen_adet), sevk = n(satir && satir.yikama_sevk_adet), gel = n(satir && satir.yikama_gelen_adet);
+    const d = n(delta);
+    const yeniSevk = sevk + d;
+    if (yeniSevk < 0) return { hata: 'Yıkama sayısı eksiye düşerdi — kayıt başka yerden değişmiş, listeyi yenileyin.' };
+    if (d < 0 && yeniSevk < gel) return { hata: `Bu kayıttan ${gel} ad yıkamadan gelmiş — yıkamaya giden bunun altına inemez (başka cihazdan giriş yapılmış olabilir).` };
+    if (d > 0 && kes > 0 && yeniSevk > kes) return { hata: `En fazla ${Math.max(0, kes - sevk)} ad eklenebilir (başka cihazdan sevk yapılmış).` };
+    return { yama: { yikama_sevk_adet: yeniSevk, durum: ortakYikamaSatirDurum(kes, yeniSevk, gel) } };
+}
+
+/** Düzeltmeden sonra fişin notu: yalnız GERÇEKTE yazılan farklar (yapilan: [{ si, id, delta }]) işlenir, öbür satırlar
+ *  aynen kalır; hiç satır kalmazsa fiş iptal (satırlar durur — ne geri alındığı görünsün).
+ *  bilgi: { firma, irsaliye, ts, user, kayit (duzeltmeler listesine eklenecek nesne; yeni_toplam buraya yazılır) }
+ *  → { not, toplam, iptal } */
+function ortakYikamaFisYeniHali(fis, yapilan, bilgi) {
+    const n = (v) => parseInt(v, 10) || 0;
+    const b = bilgi || {};
+    const satirlar = Array.isArray(fis && fis.satirlar) ? fis.satirlar : [];
+    const son = [];
+    satirlar.forEach((s, si) => {
+        const deltalar = (yapilan || []).filter((x) => x.si === si);
+        if (!deltalar.length) { son.push(s); return; }
+        const m = new Map((ortakYikamaFisSatirKy(fis, si) || []).map((d) => [d.id, Object.assign({}, d)]));
+        deltalar.forEach((x) => {
+            const id = String(x.id);
+            const d = m.get(id) || { id, pay: 0 };
+            d.pay += n(x.delta);
+            m.set(id, d);
+        });
+        const ky = [...m.values()].filter((d) => d.pay > 0);
+        const adet = n(s.adet) + deltalar.reduce((t, x) => t + n(x.delta), 0);
+        if (adet > 0) son.push(Object.assign({}, s, { adet, ky }));
+    });
+    const toplam = son.reduce((t, s) => t + n(s.adet), 0);
+    const kayit = b.kayit ? Object.assign({}, b.kayit, { yeni_toplam: toplam }) : null;
+    const duzeltmeler = (Array.isArray(fis && fis.duzeltmeler) ? fis.duzeltmeler : []).concat(kayit ? [kayit] : []);
+    const not = son.length
+        ? Object.assign({}, fis, { fis_firma: b.firma, fis_irsaliye: b.irsaliye, toplam_ad: toplam, kalem_say: son.length,
+            satirlar: son, ky_deltalar: son.flatMap((s) => (Array.isArray(s.ky) ? s.ky : [])), duzeltmeler })
+        : Object.assign({}, fis, { iptal: true, iptal_ts: b.ts, iptal_user: b.user, duzeltmeler });
+    return { not, toplam, iptal: !son.length };
+}
+
 /* ── Kumaş planı ─────────────────────────────────────────────────────── */
 
 /** Plandaki kumaşlar (KD_URUN_AGACI siparis.kumas_plani.kumaslar) → [{ id, kod, ad, cekme, fazla, kesim_fire, boya_fire }]
@@ -3329,7 +3473,7 @@ async function veriGirisleriYukle(){
       }else if(row.islem==='YIKAMA_FIS'){
         diger.push({tip:'yikama_fis',id:row.id,ts:row.created_at,sno:sip?.sno,firma:j.fis_firma,
           etiket:`Fiş: ${j.fis_irsaliye||'—'} · ${j.kalem_say||0} kalem`,adet:j.toplam_ad,
-          user:j.user,siparisId:row.siparis_id,iptal:!!j.iptal,raw:j});
+          user:j.user,siparisId:row.siparis_id,iptal:!!j.iptal,raw:j,ham:String(row.notlar||'')});   /* ham: düzeltmede "gördüğü hâl" */
       }
     });
   }catch(e){console.warn('veriGirisleriYukle',e.message||e);}
@@ -3357,10 +3501,7 @@ function vgAramaDegisti(v){
  * fazla satırlı eski fişlerde hangi payın hangi satıra ait olduğu bilinmediği için
  * (yanlış satırı bozmamak adına) düzenleme sadece firma/irsaliye ile sınırlı kalır. */
 function vgSatirKyCoz(raw,satirlar,si){
-  const s=satirlar[si];
-  if(Array.isArray(s?.ky))return s.ky;
-  if(satirlar.length===1 && Array.isArray(raw?.ky_deltalar) && raw.ky_deltalar.length>0)return raw.ky_deltalar;
-  return null;
+  return ortakYikamaFisSatirKy({...(raw||{}),satirlar},si);   /* kural ORTAK (ana program konfYikamaFisSatirKy aynı) */
 }
 
 let _vgDuzenleSet=new Set();
@@ -3421,9 +3562,10 @@ function veriGirisleriRenderListe(){
         const satirlar=e.raw?.satirlar||[];
         const stokTakipVar=satirlar.some((s,si)=>Array.isArray(vgSatirKyCoz(e.raw,satirlar,si)));
         const satirHtml=satirlar.map((s,si)=>{
+          const bagli=Array.isArray(vgSatirKyCoz(e.raw,satirlar,si));   /* bağı olmayan eski satırın adedi değişmez (ana programla aynı) */
           return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
             <div style="flex:1;min-width:0;font-size:10px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.siparis_sno||'')} · ${esc([s.desen,s.renk,s.ebat].filter(Boolean).join(' · '))}</div>
-            <input id="vg-satir-ad-${i}-${si}" type="text" inputmode="decimal" value="${s.adet}" style="width:64px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:5px;font-size:13px;font-weight:700;text-align:center;outline:none">
+            <input id="vg-satir-ad-${i}-${si}" type="text" inputmode="decimal" value="${s.adet}" ${bagli?'':'disabled'} style="width:64px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:5px;font-size:13px;font-weight:700;text-align:center;outline:none;${bagli?'':'opacity:.5'}">
           </div>`;
         }).join('');
         duzenleFormu=`<div style="margin-top:8px">
@@ -3432,7 +3574,7 @@ function veriGirisleriRenderListe(){
             <input id="vg-irs-${i}" class="field-input" value="${esc(e.raw?.fis_irsaliye||'')}" placeholder="İrsaliye no" style="flex:1;min-width:110px;margin-bottom:0;font-size:12px">
           </div>
           ${satirHtml}
-          <div style="font-size:9px;color:var(--text3);margin:4px 0 8px">Adedi 0 yaparsanız o satır fişten çıkarılır.${stokTakipVar?' Bekleyenden fazlası girilirse en fazla bekleyen kadarı uygulanır.':' Bu fiş eski sürümle oluşturulduğu için stok kaydı bilgisi yok — bu düzeltme sadece fiş kaydını günceller, ilgili ürünün yıkama bekleyen adedini otomatik değiştirmez.'}</div>
+          <div style="font-size:9px;color:var(--text3);margin:4px 0 8px">Adedi 0 yaparsanız o satır fişten çıkarılır. Yalnız değiştirdiğiniz satır işlenir.${stokTakipVar?' Yıkamaya hazır maldan fazlası ya da yıkamadan gelmiş mal girilirse kayıt yapılmaz, nedeni yazılır.':' Bu fiş eski sürümle oluşturulduğu için adetler değişmez — yalnız firma / irsaliye düzeltilir.'}</div>
           <div style="display:flex;gap:6px">
             <button type="button" onclick="veriGirisiFisKaydet(this,${i})" style="flex:1;background:${m.color};border:none;border-radius:7px;color:#fff;padding:7px;font-size:11px;font-weight:800;cursor:pointer">Kaydet</button>
             <button type="button" onclick="veriGirisiDuzenleKapat(${i})" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);padding:7px;font-size:11px;font-weight:800;cursor:pointer">Vazgeç</button>
@@ -3505,14 +3647,34 @@ async function veriGirisiKesimKaydet(i){
   }catch(err){showToast('❌ Güncellenemedi: '+(err.message||err));}
 }
 
+/* Kalite kaydı düzelt / geri al (27.11.2026, yıkama fişindeki x2 ile aynı kalıp): fark listedeki (bayat olabilen) adetten
+   hesaplanıyordu ve not listedeki hâlle yazılıyordu — iki kez çalışınca (kayıt sürerken ikinci dokunuş, eski liste) fark iki
+   kez işlenir, silinmiş kayıt geri gelirdi. Şimdi kayıt veritabanından TAZE okunur; listedeki adetle aynı değilse ya da
+   silinmişse hiçbir şey yazılmaz; aynı kayıtta ikinci işlem başlamaz. */
+const _vgKayitSuruyor=new Set();
+async function vgKaliteTazeOku(e){
+  const{data,error}=await sb.from('siparis_akis').select('id,notlar').eq('id',e.id).limit(1);
+  if(error)throw new Error('Kayıt okunamadı: '+(error.message||error));
+  const r=data?.[0];
+  if(!r)throw new Error('Kayıt bulunamadı — liste yenileniyor');
+  let j={};try{j=JSON.parse(r.notlar||'{}')||{};}catch(x){j={};}
+  if(j.iptal||j.silindi||j.panel_silindi)throw new Error('Bu kayıt zaten silinmiş — liste yenileniyor');
+  const adet=parseInt(j.kk_gecen||0,10)||0;
+  if(adet!==(parseInt(e.adet||0,10)||0))throw new Error('Kayıt bu liste açıldıktan sonra değişmiş — liste yenileniyor');
+  return{j,adet};
+}
 async function veriGirisiKaliteKaydet(i){
   const e=_vgListe[i];
   if(!e||vgDegismez(e))return;
   const yeniVal=erpParseExcelNumberExpr(document.getElementById(`vg-ad-${i}`)?.value||0);
   if(yeniVal<0){showToast('Geçerli bir adet girin');return;}
+  if(_vgKayitSuruyor.has(String(e.id))){showToast('Bu kayıt için önceki işlem sürüyor',2400);return;}
+  _vgKayitSuruyor.add(String(e.id));
   try{
-    const eskiVal=parseInt(e.adet||0,10)||0;
+    const taze=await vgKaliteTazeOku(e);
+    const eskiVal=taze.adet;
     const delta=yeniVal-eskiVal;
+    if(!delta){showToast('Değişiklik yok');return;}
     const kd=await getKd(e.siparisId,'KD_KONFEKSIYON',true);
     const k=kd['kalem_'+e.kalemIdx]||{};
     k.kk_gecen=Math.max(0,(parseInt(k.kk_gecen||0)||0)+delta);
@@ -3522,104 +3684,139 @@ async function veriGirisiKaliteKaydet(i){
     let tKK=0;kalemler.forEach((_,idx)=>{tKK+=parseInt((kd['kalem_'+idx]||{}).kk_gecen||0)||0;});
     kd.kk_gecen=tKK;
     await sbKdSet(e.siparisId,'KD_KONFEKSIYON',kd);
-    await sbYaz(()=>sb.from('siparis_akis').update({notlar:JSON.stringify({...e.raw,kk_gecen:yeniVal,duzeltildi:true})}).eq('id',e.id),'Kalite kaydı');
+    await sbYaz(()=>sb.from('siparis_akis').update({notlar:JSON.stringify({...taze.j,kk_gecen:yeniVal,duzeltildi:true})}).eq('id',e.id),'Kalite kaydı');
+    konfKaliteSiparisTazele([e.siparisId]).catch(()=>{});
     await panelIzYaz('siparis_akis',e.id,'DUZENLE',`Kalite kaydı düzeltildi · ${vgIzEtiket(e)} · ${eskiVal} → ${yeniVal}`,{kk_gecen:eskiVal,giren:e.user||''},{kk_gecen:yeniVal});
     showToast('✅ Güncellendi');
     await veriGirisleriRender();
-  }catch(err){showToast('❌ Güncellenemedi: '+(err.message||err));}
+  }catch(err){
+    showToast('❌ Güncellenemedi: '+(err.message||err),4000);
+    if(/değişmiş|silinmiş|bulunamadı/.test(String(err.message||'')))await veriGirisleriRender();
+  }finally{_vgKayitSuruyor.delete(String(e.id));}
 }
 
-/** Fişin içeriğini (satır adetleri + firma/irsaliye) düzenler: her satırın eski payı
- * ilgili konf_kesim_yikama satırlarından geri alınır, sonra güncel bekleyene göre
- * istenen yeni adet tekrar dağıtılır (yeni fiş oluşturmadaki mantığın aynısı). */
+/* YIKAMA FİŞİ DÜZELT / GERİ AL (27.11.2026 — ana programdaki 04 konfYikamaFisDuzeltUygula ile AYNI yol).
+   Kullanıcı 27.11: "fişi düzenlediğimizde düzenlenen sayı doğru yazılıyor ama fişteki her şey yeniden kayıt yapılıyor, her şey
+   x2". Eskiden fişin BÜTÜN satırları geri alınıp yeniden dağıtılıyordu (satır başına iki tam tablo okuması — 11 satırlık fişte
+   dakikalar); kayıt sürerken ikinci dokunuş / eski liste fişi eski paylarıyla yeniden işledi: geri alma 0'da kesildi, dağıtım
+   yeniden ekledi (YF-20261126-11: 5 kalemde +44 ad). Şimdi:
+   - tek çalışma kilidi (_vgFisSuruyor): bir fiş düzeltmesi / geri alması sürerken ikincisi başlamaz;
+   - fiş veritabanından TAZE okunur; formdaki hâlle (e.ham) aynı değilse hiçbir şey yazılmaz;
+   - plan ORTAK kuraldan (ortakYikamaFisDuzeltPlan): yalnız adedi DEĞİŞEN satır, fark kadar; sınırlar ortakYikamaKalemPaylari;
+   - sayaçlar koşullu yazıcıyla, her satırda taze değer yeniden denetlenir (ortakYikamaFisSayacYama);
+   - fiş GERÇEKTE yazılanla kaydedilir (ortakYikamaFisYeniHali) — bir sayaç yazılamazsa durur, fiş ile sayaç ayrışmaz. */
+let _vgFisSuruyor=false;
+function yikamaPaylarMap(){
+  const m=new Map();
+  yikamaKalemGruplari().forEach(g=>{ortakYikamaKalemPaylari(g.satirlar,yikamaKapatmalari(g.sid,g.ki)).forEach(p=>m.set(p.id,p));});
+  return m;
+}
+/** opts: { adetler: [satır sırasıyla yeni adet | null], firma, irsaliye, geriAl } → { degismedi } | { eskiToplam, yeniToplam, iptal } */
+async function vgFisDuzeltUygula(e,opts){
+  if(_vgFisSuruyor)throw new Error('Önceki fiş kaydı sürüyor — bitmesini bekleyin');
+  _vgFisSuruyor=true;
+  try{return await vgFisDuzeltUygulaIc(e,opts||{});}
+  finally{_vgFisSuruyor=false;}
+}
+async function vgFisDuzeltUygulaIc(e,opts){
+  const geriAl=!!opts.geriAl;
+  const user=String(currentUser?.display_name||currentUser?.username||'').trim()||'Sistem';
+  /* 1) taze: kesim / yıkama satırları + fiş */
+  _konfKyCache.ts=0;
+  await konfKyYukle(true);
+  if(!_konfKyCache.ts)throw new Error('Kesim / yıkama kayıtları okunamadı — internet bağlantısını kontrol edin');
+  const{data,error}=await sb.from('siparis_akis').select('id,islem,kalem_ad,miktar,notlar').eq('id',e.id).limit(1);
+  if(error)throw new Error('Fiş okunamadı: '+(error.message||error));
+  const r=data?.[0];
+  if(!r||r.islem!=='YIKAMA_FIS')throw new Error('Fiş bulunamadı — liste yenileniyor');
+  const ham=String(r.notlar||'');
+  let j={};try{j=JSON.parse(ham||'{}')||{};}catch(x){j={};}
+  if(j.iptal)throw new Error('Bu fiş zaten silinmiş — liste yenileniyor');
+  if(e.ham!=null&&ham!==e.ham)throw new Error('Fiş bu liste açıldıktan sonra değişmiş — liste yenileniyor, yeniden açıp düzeltin');
+  const satirlar=Array.isArray(j.satirlar)?j.satirlar:[];
+  const istenen=geriAl?satirlar.map(()=>0):(opts.adetler||[]);
+  const firma=geriAl?String(j.fis_firma||''):String(opts.firma??j.fis_firma??'').trim();
+  const irsaliye=geriAl?String(j.fis_irsaliye||''):String(opts.irsaliye??j.fis_irsaliye??'').trim();
+  if(!firma&&!geriAl)throw new Error('Firma boş olamaz');
+  /* 2) plan — hiçbir şey yazmaz */
+  const kySatirlari=_konfKyCache.rows||[];
+  const plan=ortakYikamaFisDuzeltPlan(j,istenen,yikamaPaylarMap(),kySatirlari);
+  if(plan.hatalar.length)throw new Error(plan.hatalar.join('\n'));
+  const basliktaFark=firma!==String(j.fis_firma||'')||irsaliye!==String(j.fis_irsaliye||'');
+  if(!plan.islemler.length&&!basliktaFark&&!geriAl)return{degismedi:true};
+  const eskiToplam=(parseInt(j.toplam_ad,10)||0)||satirlar.reduce((t,s)=>t+(parseInt(s.adet,10)||0),0);
+  const fisNo=j.fis_irsaliye||('FIS-'+String(e.id).slice(0,8));
+  /* 3) sayaçlar — taze satırda yeniden denetlenir; biri yazılamazsa durur */
+  const ts=new Date().toISOString();
+  const yapilan=[];
+  let hata=null;
+  for(const is of plan.islemler){
+    try{
+      const row=kySatirlari.find(x=>String(x.id)===String(is.id))||null;
+      const sonuc=await konfKySayacYaz(is.id,cur=>{
+        const y=ortakYikamaFisSayacYama(cur,is.delta);
+        if(y.hata)throw new Error(y.hata);
+        return{...y.yama,notlar:JSON.stringify({son_sevk_duzelt:{fark:is.delta,user,ts,fis_id:String(e.id),fis_no:fisNo,kaynak:'KONF_PANEL'}})};
+      },row);
+      if(!sonuc)throw new Error('Kesim / yıkama kaydı yazılamadı');
+      yapilan.push(is);
+    }catch(x){hata=x;break;}
+  }
+  /* 4) fiş — GERÇEKTE yazılan paylarla; değişmeyen satır aynen kalır */
+  const kayit={ts,user,eski_toplam:eskiToplam,kaynak:'KONF_PANEL',...(geriAl?{geri_al:true}:{}),...(hata?{yarim:String(hata.message||hata).slice(0,200)}:{})};
+  const yeni=ortakYikamaFisYeniHali(j,yapilan,{firma,irsaliye,ts,user,kayit});
+  try{
+    await sbYaz(()=>sb.from('siparis_akis').update({
+      kalem_ad:yeni.not.fis_firma||r.kalem_ad,miktar:yeni.iptal?r.miktar:yeni.toplam,notlar:JSON.stringify(yeni.not)
+    }).eq('id',e.id).select('id'),'Yıkama fişi');
+  }catch(x){
+    throw new Error('Sayaçlar düzeltildi ama fiş kaydı yazılamadı ('+(x.message||x)+') — fişte eski adetler görünebilir; ana programdan bakın');
+  }
+  await panelIzYaz('siparis_akis',e.id,geriAl||yeni.iptal?'SIL':'DUZENLE',
+    `Yıkama fişi ${geriAl||yeni.iptal?'geri alındı':'düzeltildi'} · ${[e.sno,firma,irsaliye&&'irsaliye '+irsaliye].filter(Boolean).join(' · ')} · ${eskiToplam} → ${yeni.iptal?0:yeni.toplam} ad`,
+    {toplam_ad:eskiToplam,fis_firma:j.fis_firma||'',fis_irsaliye:j.fis_irsaliye||'',giren:j.user||''},
+    yeni.iptal?null:{toplam_ad:yeni.toplam,fis_firma:firma,fis_irsaliye:irsaliye});
+  await konfKyYukle(true);
+  if(hata)throw new Error('Düzeltme yarım kaldı: '+(hata.message||hata)+' — fiş gerçekte yazılan adetlerle kaydedildi ('+yeni.toplam+' ad)');
+  return{eskiToplam,yeniToplam:yeni.toplam,iptal:yeni.iptal};
+}
+/** Fişin içeriğini (satır adetleri + firma/irsaliye) düzenler — yalnız değişen satır işlenir (vgFisDuzeltUygula). */
 async function veriGirisiFisKaydet(btn,i){
   const e=_vgListe[i];
   if(!e)return;
+  if(_vgFisSuruyor){showToast('Önceki fiş kaydı sürüyor — bitmesini bekleyin',2600);return;}
   const firma=(document.getElementById(`vg-firma-${i}`)?.value||'').trim();
   const irsaliye=(document.getElementById(`vg-irs-${i}`)?.value||'').trim();
   if(!firma){showToast('Firma boş olamaz');return;}
-  const eskiSatirlar=e.raw?.satirlar||[];
+  const satirlar=e.raw?.satirlar||[];
+  const adetler=[];
+  for(let si=0;si<satirlar.length;si++){
+    const el=document.getElementById(`vg-satir-ad-${i}-${si}`);
+    if(!el||el.disabled){adetler.push(null);continue;}
+    const v=erpParseExcelNumberExpr(el.value);
+    if(!Number.isFinite(v)||v<0||Math.round(v)!==v){showToast('Adet tam sayı olmalı: '+[satirlar[si].siparis_sno,satirlar[si].renk].filter(Boolean).join(' · '),3000);el.focus();return;}
+    adetler.push(v);
+  }
   if(btn){btn.disabled=true;btn.textContent='…';}
   try{
-    const yeniSatirlar=[];
-    for(let si=0;si<eskiSatirlar.length;si++){
-      const s=eskiSatirlar[si];
-      const cozulenKy=vgSatirKyCoz(e.raw,eskiSatirlar,si);
-      const inputEl=document.getElementById(`vg-satir-ad-${i}-${si}`);
-      const istenenAdet=inputEl?erpParseExcelNumberExpr(inputEl.value):s.adet;
-      if(!Array.isArray(cozulenKy)){
-        // Stok bağlantısı bilinmeyen eski satır: sadece fiş kaydındaki adedi düzelt, stoğa dokunma
-        if(istenenAdet>0)yeniSatirlar.push({...s,adet:istenenAdet});
-        continue;
-      }
-      let kesimsizKalem=Number.isFinite(parseInt(s.kalem_idx,10))?parseInt(s.kalem_idx,10):null;
-      for(const d of cozulenKy){
-        /* Okunamayan satır atlanmaz (hata fırlar) — atlansaydı eski pay geri alınmaz, mal yıkamada asılı kalırdı. */
-        await konfKySayacYaz(d.id,cur=>{
-          if(konfKyKesimsizMi(cur)&&kesimsizKalem==null)kesimsizKalem=parseInt(cur.kalem_idx,10);
-          const yeniSevk=Math.max(0,(parseInt(cur.yikama_sevk_adet||0,10)||0)-(parseInt(d.pay||0,10)||0));
-          const kes=parseInt(cur.kesilen_adet||0,10)||0;
-          return{yikama_sevk_adet:yeniSevk,durum:yeniSevk<=0?'YIKAMA_BEKLIYOR':(yeniSevk>=kes?'YIKAMADA':'YIKAMA_KISMEN')};
-        },null,true);
-      }
-      if(istenenAdet<=0)continue; // 0 girildiyse satır fişten çıkar
-      await konfKyYukle(true);
-      const grup=yikamaHazirGrupla().find(g=>String(g.siparis_id)===String(s.siparis_id)&&g.desen===s.desen&&g.renk===s.renk&&g.ebat===s.ebat);
-      const maxKalan=grup?grup.kalanTop:0;
-      let uygulanacak=Math.min(istenenAdet,maxKalan);
-      const eksik=istenenAdet-uygulanacak;
-      let kesimsizPay=0;
-      if(eksik>0 && Number.isFinite(kesimsizKalem)){
-        kesimsizPay=eksik; // kesim kaydı yok/yetersiz — engelsiz, kesimsiz yıkama payı olarak eklenir
-      }else if(eksik>0){
-        showToast(`${esc(s.siparis_sno||'')}: en fazla ${maxKalan} adet uygulanabildi (ürün belirsiz — kesimsiz yazılamadı)`,3500);
-      }
-      const yeniKy=[];
-      let kalanEkle=uygulanacak;
-      if(grup)for(const p of grup.parcalar){
-        if(kalanEkle<=0)break;
-        const pay=Math.min(kalanEkle,p.kalan);
-        if(pay<=0)continue;
-        const row=(_konfKyCache.rows||[]).find(r=>r.id===p.id);
-        await konfKySayacYaz(p.id,cur=>{
-          const yeniSevk=(parseInt(cur.yikama_sevk_adet||0,10)||0)+pay;
-          const kes=parseInt(cur.kesilen_adet||0,10)||0;
-          return{yikama_sevk_adet:yeniSevk,durum:yeniSevk>=kes?'YIKAMADA':'YIKAMA_KISMEN'};
-        },row);
-        yeniKy.push({id:p.id,pay});
-        kalanEkle-=pay;
-      }
-      if(kesimsizPay>0){
-        const user=currentUser?.display_name||currentUser?.username||'Sistem';
-        const ks=await yikamaKesimsizSatirAl({...s,kalem_idx:kesimsizKalem},user);
-        await konfKySayacYaz(ks.id,cur=>({yikama_sevk_adet:(parseInt(cur.yikama_sevk_adet||0,10)||0)+kesimsizPay,durum:'YIKAMADA'}),ks);
-        yeniKy.push({id:ks.id,pay:kesimsizPay,kesimsiz:true});
-        uygulanacak+=kesimsizPay;
-      }
-      await konfKyYukle(true);
-      const{kesimsiz_adet:_eskiKesimsiz,...sTemiz}=s;
-      if(uygulanacak>0)yeniSatirlar.push({...sTemiz,adet:uygulanacak,...(kesimsizPay>0?{kesimsiz_adet:kesimsizPay}:{}),ky:yeniKy});
-    }
-    const toplamAd=yeniSatirlar.reduce((s,x)=>s+(parseInt(x.adet||0,10)||0),0);
-    const yeniKyDeltalar=yeniSatirlar.flatMap(s=>Array.isArray(s.ky)?s.ky:[]);
-    await sbYaz(()=>sb.from('siparis_akis').update({
-      kalem_ad:firma,miktar:toplamAd,
-      notlar:JSON.stringify({...e.raw,fis_firma:firma,fis_irsaliye:irsaliye,toplam_ad:toplamAd,kalem_say:yeniSatirlar.length,satirlar:yeniSatirlar,ky_deltalar:yeniKyDeltalar})
-    }).eq('id',e.id),'Yıkama fişi');
-    await panelIzYaz('siparis_akis',e.id,'DUZENLE',`Yıkama fişi düzeltildi · ${[e.sno,firma,irsaliye&&'irsaliye '+irsaliye].filter(Boolean).join(' · ')} · ${parseInt(e.adet||0,10)||0} → ${toplamAd} ad`,
-      {toplam_ad:parseInt(e.adet||0,10)||0,fis_firma:e.raw?.fis_firma||'',fis_irsaliye:e.raw?.fis_irsaliye||'',giren:e.user||''},{toplam_ad:toplamAd,fis_firma:firma,fis_irsaliye:irsaliye});
-    showToast('✅ Fiş güncellendi');
+    const s=await vgFisDuzeltUygula(e,{adetler,firma,irsaliye});
+    showToast(s.degismedi?'Değişiklik yok':(s.iptal?'✅ Fişteki bütün satırlar çıkarıldı — fiş silindi':`✅ Fiş güncellendi · ${s.eskiToplam} → ${s.yeniToplam} ad`),3200);
     await veriGirisleriRender();
   }catch(err){
-    showToast('❌ Güncellenemedi: '+(err.message||err));
-    if(btn){btn.disabled=false;btn.textContent='Kaydet';}
+    showToast('❌ Güncellenemedi: '+(err.message||err),6000);
+    /* fiş değişmiş / yarım kaldıysa liste tazelenir (eski hâlle yeniden denenmesin) */
+    if(/değişmiş|silinmiş|bulunamadı|yarım|yazılamadı/.test(String(err.message||'')))await veriGirisleriRender();
+    else if(btn){btn.disabled=false;btn.textContent='Kaydet';}
   }
 }
 
 async function veriGirisiGeriAl(btn,i){
   const e=_vgListe[i];
   if(!e||vgDegismez(e))return;
+  if(_vgKayitSuruyor.has(String(e.id))||(e.tip==='yikama_fis'&&_vgFisSuruyor)){showToast('Bu kayıt için önceki işlem sürüyor',2400);return;}
   if(!confirm('Bu kayıt geri alınsın mı? Bu işlem geri alınamaz.'))return;
+  if(_vgKayitSuruyor.has(String(e.id))){showToast('Bu kayıt için önceki işlem sürüyor',2400);return;}
+  _vgKayitSuruyor.add(String(e.id));
   if(btn){btn.disabled=true;btn.textContent='…';}
   try{
     if(e.tip==='kesim'){
@@ -3627,43 +3824,31 @@ async function veriGirisiGeriAl(btn,i){
       await panelIzYaz('konf_kesim_yikama',e.id,'SIL',`Kesim geri alındı · ${vgIzEtiket(e)} · ${e.adet} ad`,{kesilen_adet:e.adet,giren:e.user||''},null);
       await konfKyYukle(true);
     }else if(e.tip==='kalite'){
+      const taze=await vgKaliteTazeOku(e);   /* silinmiş / değişmiş kayıt ikinci kez düşülmez */
       const kd=await getKd(e.siparisId,'KD_KONFEKSIYON',true);
       const k=kd['kalem_'+e.kalemIdx]||{};
-      k.kk_gecen=Math.max(0,(parseInt(k.kk_gecen||0)||0)-(parseInt(e.adet||0)||0));
+      k.kk_gecen=Math.max(0,(parseInt(k.kk_gecen||0)||0)-taze.adet);
       kd['kalem_'+e.kalemIdx]=k;
       const sip=siparisler.find(s=>String(s.id)===String(e.siparisId));
       const kalemler=parseKalemler(sip||{});
       let tKK=0;kalemler.forEach((_,idx)=>{tKK+=parseInt((kd['kalem_'+idx]||{}).kk_gecen||0)||0;});
       kd.kk_gecen=tKK;
       await sbKdSet(e.siparisId,'KD_KONFEKSIYON',kd);
-      await sbYaz(()=>sb.from('siparis_akis').update({notlar:JSON.stringify({...e.raw,iptal:true})}).eq('id',e.id),'Kalite kaydı');
+      await sbYaz(()=>sb.from('siparis_akis').update({notlar:JSON.stringify({...taze.j,iptal:true})}).eq('id',e.id),'Kalite kaydı');
       konfKaliteSiparisTazele([e.siparisId]).catch(()=>{});   /* iptal edilen kayıt kalite sayısından düşer */
-      await panelIzYaz('siparis_akis',e.id,'SIL',`Kalite kaydı geri alındı · ${vgIzEtiket(e)} · ${e.adet} ad`,{kk_gecen:e.adet,giren:e.user||''},null);
+      await panelIzYaz('siparis_akis',e.id,'SIL',`Kalite kaydı geri alındı · ${vgIzEtiket(e)} · ${taze.adet} ad`,{kk_gecen:taze.adet,giren:e.user||''},null);
     }else if(e.tip==='yikama_fis'){
-      const deltalar=e.raw.ky_deltalar||[];
-      for(const d of deltalar){
-        /* Okunamayan satır atlanmaz (hata fırlar) — atlansaydı fiş silinir ama mal yıkamada asılı kalırdı. */
-        await konfKySayacYaz(d.id,cur=>{
-          const yeniSevk=Math.max(0,(parseInt(cur.yikama_sevk_adet||0,10)||0)-(parseInt(d.pay||0,10)||0));
-          const kes=parseInt(cur.kesilen_adet||0,10)||0;
-          return{yikama_sevk_adet:yeniSevk,durum:yeniSevk<=0?'YIKAMA_BEKLIYOR':(yeniSevk>=kes?'YIKAMADA':'YIKAMA_KISMEN')};
-        },null,true);
-      }
-      await konfKyYukle(true);
-      await sbYaz(()=>sb.from('siparis_akis').update({notlar:JSON.stringify({...e.raw,iptal:true})}).eq('id',e.id),'Yıkama fişi');
-      await panelIzYaz('siparis_akis',e.id,'SIL',`Yıkama fişi geri alındı · ${vgIzEtiket(e)} · ${e.adet||0} ad`,{toplam_ad:e.adet||0,giren:e.user||''},null);
-      if(!deltalar.length){
-        showToast('✅ Fiş silindi (eski sürüm — stok kaydı otomatik değişmedi)',3200);
-        await veriGirisleriRender();
-        return;
-      }
+      /* 27.11.2026: düzeltmeyle AYNI yol (taze fiş, ortak plan, tek çalışma) — eskiden listedeki (bayat olabilen) paylar
+         0'da kesilerek düşülüyordu; yıkamadan gelmiş mal varsa silme yapılmaz (ana programla aynı). */
+      await vgFisDuzeltUygula(e,{geriAl:true});
     }
     showToast('✅ Silindi');
     await veriGirisleriRender();
   }catch(err){
-    showToast('❌ Silinemedi: '+(err.message||err));
-    if(btn){btn.disabled=false;btn.textContent='🗑️ Sil';}
-  }
+    showToast('❌ Silinemedi: '+(err.message||err),6000);
+    if(/değişmiş|silinmiş|bulunamadı|yarım|yazılamadı/.test(String(err.message||'')))await veriGirisleriRender();
+    else if(btn){btn.disabled=false;btn.textContent='🗑️ Sil';}
+  }finally{_vgKayitSuruyor.delete(String(e.id));}
 }
 /* ================= /Veri Girişleri ================= */
 
@@ -5222,25 +5407,6 @@ function yikamaFisSatirlariTemizle(){
   yikamaFisSatirlariRender();
 }
 
-function yikamaHazirGrupla(){
-  const rows=(_konfKyCache.rows||[]).filter(r=>String(r.rota||'').toUpperCase()==='YIKAMA' && r.aktif!==false && !konfKyDevirMi(r)); /* devir satırı yıkamaya gidecek mal değil (20.10.2026) */
-  const map=new Map();
-  rows.forEach(r=>{
-    const kalan=Math.max(0,(parseInt(r.kesilen_adet||0,10)||0)-(parseInt(r.yikama_sevk_adet||0,10)||0));
-    if(kalan<=0)return;
-    const key=`${r.siparis_id}|${r.desen||''}|${r.renk||''}|${r.ebat||''}`;
-    let g=map.get(key);
-    if(!g){
-      g={key,siparis_id:r.siparis_id,siparis_sno:r.siparis_sno||String(r.siparis_id),firma:r.firma||'',desen:r.desen||'—',renk:r.renk||'—',ebat:r.ebat||'—',kalanTop:0,parcalar:[]};
-      map.set(key,g);
-    }
-    g.kalanTop+=kalan;
-    g.parcalar.push({id:r.id,kalan,ts:r.kesim_ts||r.created_at||''});
-  });
-  map.forEach(g=>g.parcalar.sort((a,b)=>new Date(a.ts||0)-new Date(b.ts||0)));
-  return Array.from(map.values()).sort((a,b)=>compareSno(a.siparis_sno,b.siparis_sno));
-}
-
 /* ── YIKAMAYA HAZIR LİSTESİ (28.10.2026, kullanıcı: "kesilen mallar yıkamaya gönderilmeye hazır olarak listelenecek" —
    tablette, ana programın Yıkama ekranında, ana sayfada ve yeni mobilde AYNI liste). Hesap ORTAK-KURALLAR
    ortakYikamaKalemPaylari (ana program 04 konfYikamaKalemPaylari da onu çağırır): kalem içinde netleşir (kesimsiz yıkama
@@ -5253,7 +5419,8 @@ function yikamaKapatmalari(sid,ki){
   const i=parseInt(ki,10);
   return l.map(r=>ortakYikamaOnuKapatOku(r.not)).filter(k=>k&&k.ki===i);
 }
-function yikamaHazirListe(){
+/** Kalem kalem yıkama satırları (hazır listesi ve fiş düzeltmesi AYNI seçimi kullanır): Map(sid|ki → { sid, ki, satirlar, ham }). */
+function yikamaKalemGruplari(){
   const sipMap=new Map((panelSiparisTum||[]).map(s=>[String(s.id),s]));
   const kalemler=new Map();
   (_konfKyCache.rows||[]).forEach(r=>{
@@ -5268,8 +5435,12 @@ function yikamaHazirListe(){
     g.satirlar.push({id:r.id,ts:Date.parse(r.kesim_ts||r.created_at||'')||0,kes:r.kesilen_adet,sevk:r.yikama_sevk_adet,gel:r.yikama_gelen_adet});
     g.ham.set(String(r.id),r);
   });
+  return kalemler;
+}
+function yikamaHazirListe(){
+  const sipMap=new Map((panelSiparisTum||[]).map(s=>[String(s.id),s]));
   const out=[];
-  kalemler.forEach(g=>{
+  yikamaKalemGruplari().forEach(g=>{
     ortakYikamaKalemPaylari(g.satirlar,yikamaKapatmalari(g.sid,g.ki)).forEach(p=>{
       if(!(p.gidecek>0))return;
       const r=g.ham.get(p.id),s=sipMap.get(String(r.siparis_id));
@@ -6951,8 +7122,8 @@ window.addEventListener('offline',()=>{if(karsilamaAcik())karsilamaCiz();});
    surum.json yalnız bu sayfadan YENİ damgalıysa dinlenir (zaman > PANEL_ZAMAN): html yüklenip surum.json unutulunca
    eski surum.json tableti boştayken 10 dk'da bir boşuna yeniden yüklüyordu. Aynı hedef için denemeler seyrekleşir
    (10 dk, 20, 40 … en çok 6 saat) — yeniden yükleme döngüsü üretimi durdurmasın. */
-const PANEL_SURUM='20261125-b728735c';
-const PANEL_ZAMAN=1795588326;
+const PANEL_SURUM='20261127-72eea57a';
+const PANEL_ZAMAN=1795761250;
 /** Hangi sayfanın açık olduğu tabletten okunabilsin (karşılama sayfasının altında). */
 function panelSurumYazisi(){
   const t=new Date(document.lastModified||'');
